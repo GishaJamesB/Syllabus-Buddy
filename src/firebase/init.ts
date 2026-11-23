@@ -18,6 +18,7 @@ export interface FirebaseServices {
   app: FirebaseApp
   uid: string
   createTurnModel: () => ReturnType<typeof getGenerativeModel>
+  createAuthorModel: (model: string, timeoutMs: number, responseJsonSchema: Record<string, unknown>) => ReturnType<typeof getGenerativeModel>
 }
 
 export async function initFirebase(config: AppConfig): Promise<FirebaseServices> {
@@ -60,5 +61,18 @@ export async function initFirebase(config: AppConfig): Promise<FirebaseServices>
       { timeout: CLOUD_TIMEOUT_MS },
     )
 
-  return { app, uid: cred.user.uid, createTurnModel }
+  const createAuthorModel = (model: string, timeoutMs: number, responseJsonSchema: Record<string, unknown>) =>
+    getGenerativeModel(
+      ai,
+      {
+        mode: InferenceMode.ONLY_IN_CLOUD,
+        inCloudParams: {
+          model,
+          generationConfig: { responseMimeType: 'application/json', responseJsonSchema },
+        },
+      },
+      { timeout: timeoutMs },
+    )
+
+  return { app, uid: cred.user.uid, createTurnModel, createAuthorModel }
 }

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { readConfig } from './firebase/config'
 import { initFirebase, type FirebaseServices } from './firebase/init'
 import { getOnDeviceStatus, prepareOnDeviceModel, type OnDeviceStatus } from './ai/onDeviceStatus'
@@ -20,7 +20,20 @@ interface RunOutput {
   source: string
 }
 
+const AuthorPage = import.meta.env.DEV ? lazy(() => import('./author/AuthorPage')) : null
+
 export default function App() {
+  if (AuthorPage && window.location.pathname.replace(/\/+$/, '') === '/author') {
+    return (
+      <Suspense fallback={null}>
+        <AuthorPage />
+      </Suspense>
+    )
+  }
+  return <Diagnostics />
+}
+
+function Diagnostics() {
   const [services, setServices] = useState<FirebaseServices | null>(null)
   const [initError, setInitError] = useState<string | null>(null)
   const [status, setStatus] = useState<OnDeviceStatus | null>(null)
