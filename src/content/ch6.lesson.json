@@ -1,0 +1,178 @@
+{
+  "chapterId": "ch6",
+  "title": "Perimeter and Area",
+  "source": {
+    "book": "Ganita Prakash, Grade 6",
+    "chapter": "6. Perimeter and Area",
+    "credit": "Content based on NCERT Ganita Prakash, Grade 6, Chapter 6 (NCERT, New Delhi)."
+  },
+  "ideas": [
+    {
+      "id": "idea-1",
+      "order": 1,
+      "title": "Perimeter of a Rectangle",
+      "explanation": "Perimeter is the total length along the boundary of a closed figure. A rectangle has two equal lengths and two equal breadths. To find its perimeter, add the length and breadth together and multiply the sum by two.",
+      "keyPoints": [
+        "Perimeter is the total boundary length of a closed shape.",
+        "Opposite sides of a rectangle are equal.",
+        "Perimeter of a rectangle = 2 × (length + breadth)."
+      ],
+      "workedExample": {
+        "templateId": "perim_rectangle",
+        "difficulty": "easy"
+      },
+      "checkQuestion": {
+        "templateId": "perim_rectangle",
+        "difficulty": "medium"
+      },
+      "practiceTemplates": [
+        "perim_rectangle"
+      ],
+      "diagram": true
+    },
+    {
+      "id": "idea-2",
+      "order": 2,
+      "title": "Perimeter of a Square",
+      "explanation": "A square has four sides of equal length. Instead of adding all four sides individually, you can simply multiply the length of one side by four to get the perimeter.",
+      "keyPoints": [
+        "All four sides of a square have the same length.",
+        "Perimeter of a square = 4 × length of a side."
+      ],
+      "workedExample": {
+        "templateId": "perim_square",
+        "difficulty": "easy"
+      },
+      "checkQuestion": {
+        "templateId": "perim_square",
+        "difficulty": "medium"
+      },
+      "practiceTemplates": [
+        "perim_square"
+      ],
+      "diagram": true
+    },
+    {
+      "id": "idea-3",
+      "order": 3,
+      "title": "Perimeter of Triangles and Regular Polygons",
+      "explanation": "For any triangle, add the lengths of its three sides to find the perimeter. A regular polygon has all sides equal. You can find its perimeter by multiplying the side length by the total number of sides.",
+      "keyPoints": [
+        "Perimeter of a triangle = sum of all three side lengths.",
+        "A regular polygon has equal sides and equal angles.",
+        "Perimeter of an equilateral triangle = 3 × side length.",
+        "Perimeter of a regular polygon = number of sides × side length."
+      ],
+      "workedExample": {
+        "templateId": "perim_triangle",
+        "difficulty": "easy"
+      },
+      "checkQuestion": {
+        "templateId": "perim_regular_polygon",
+        "difficulty": "medium"
+      },
+      "practiceTemplates": [
+        "perim_triangle",
+        "perim_regular_polygon"
+      ],
+      "diagram": true
+    },
+    {
+      "id": "idea-4",
+      "order": 4,
+      "title": "Finding Missing Sides and Fencing Costs",
+      "explanation": "If you know the perimeter of a shape and some of its side lengths, you can rearrange the formula to find the missing side. For fencing word problems, find the perimeter first and then multiply by the cost per unit length.",
+      "keyPoints": [
+        "Subtract known sides from the total perimeter to find a missing side.",
+        "Total fencing cost = perimeter × rate per unit length.",
+        "For multiple rounds of fencing, multiply the perimeter by the number of rounds first."
+      ],
+      "workedExample": {
+        "templateId": "perim_fencing_cost",
+        "difficulty": "medium"
+      },
+      "checkQuestion": {
+        "templateId": "perim_missing_side_rectangle",
+        "difficulty": "medium"
+      },
+      "practiceTemplates": [
+        "perim_missing_side_rectangle",
+        "perim_missing_side_square",
+        "perim_fencing_cost"
+      ],
+      "diagram": true
+    },
+    {
+      "id": "idea-5",
+      "order": 5,
+      "title": "Area of Rectangles and Squares",
+      "explanation": "Area measures the amount of flat surface enclosed inside a shape. It is expressed in square units. For a rectangle, multiply length by width. For a square, multiply the side length by itself.",
+      "keyPoints": [
+        "Area is the region enclosed within a closed figure.",
+        "Area of a rectangle = length × width.",
+        "Area of a square = side × side.",
+        "Area is always measured in square units like sq cm or sq m."
+      ],
+      "workedExample": {
+        "templateId": "area_rectangle",
+        "difficulty": "easy"
+      },
+      "checkQuestion": {
+        "templateId": "area_square",
+        "difficulty": "medium"
+      },
+      "practiceTemplates": [
+        "area_rectangle",
+        "area_square",
+        "area_missing_side_rectangle"
+      ],
+      "diagram": true
+    },
+    {
+      "id": "idea-6",
+      "order": 6,
+      "title": "Uncovered Regions and L-Shaped Areas",
+      "explanation": "To find the area of an uncovered region, subtract the inner shape's area from the total area. For complex L-shapes, split the figure into smaller rectangles, find the area of each part, and add them together.",
+      "keyPoints": [
+        "Uncovered Area = Total Area − Covered Area.",
+        "Compound shapes can be divided into simple rectangles.",
+        "Sum of individual rectangular areas gives the total shape area."
+      ],
+      "workedExample": {
+        "templateId": "area_uncovered",
+        "difficulty": "medium"
+      },
+      "checkQuestion": {
+        "templateId": "area_l_shape",
+        "difficulty": "medium"
+      },
+      "practiceTemplates": [
+        "area_uncovered",
+        "area_l_shape"
+      ],
+      "diagram": true
+    },
+    {
+      "id": "idea-7",
+      "order": 7,
+      "title": "Area of a Triangle",
+      "explanation": "A diagonal cuts a rectangle into two equal triangles. Therefore, the area of a right-angled triangle formed by a diagonal is half the area of the rectangle.",
+      "keyPoints": [
+        "A diagonal divides a rectangle into two congruent triangles.",
+        "Area of the triangle = half of the area of the corresponding rectangle."
+      ],
+      "workedExample": {
+        "templateId": "area_triangle_half_rectangle",
+        "difficulty": "easy"
+      },
+      "checkQuestion": {
+        "templateId": "area_triangle_half_rectangle",
+        "difficulty": "medium"
+      },
+      "practiceTemplates": [
+        "area_triangle_half_rectangle"
+      ],
+      "diagram": true
+    }
+  ]
+}
