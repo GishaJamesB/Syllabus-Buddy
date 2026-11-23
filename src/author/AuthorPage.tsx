@@ -3,7 +3,7 @@ import { readConfig } from '../firebase/config'
 import { initFirebase, type FirebaseServices } from '../firebase/init'
 import { describeError, SETUP_GUIDE } from '../firebase/describeError'
 import { lessonJsonSchema, renumber, validateLesson, type Idea, type Lesson, type LessonIssue } from '../content/lessonSchema'
-import { checkPdfFile, draftLesson, DRAFT_MODEL, DRAFT_TIMEOUT_MS } from './draftLesson'
+import { checkPdfFile, draftLesson, DRAFT_MODEL, DRAFT_TIMEOUT_MS, RETRY_DELAYS_MS } from './draftLesson'
 import { IdeaCard } from './IdeaCard'
 import { Confetti } from './Confetti'
 
@@ -18,6 +18,7 @@ export default function AuthorPage() {
   const [file, setFile] = useState<File | null>(null)
   const [fileMessage, setFileMessage] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [retryNote, setRetryNote] = useState<string | null>(null)
   const [draftError, setDraftError] = useState<string | null>(null)
   const [lesson, setLesson] = useState<Lesson | null>(null)
   const [saving, setSaving] = useState(false)
@@ -75,8 +76,10 @@ export default function AuthorPage() {
     setBusy(true)
     setDraftError(null)
     try {
-      const model = services.createAuthorModel(DRAFT_MODEL, DRAFT_TIMEOUT_MS, lessonJsonSchema() as unknown as Record<string, unknown>)
-      const draft = await draftLesson(model, file)
+      const model = services.createAuthorModel(import.meta.env.VITE_AUTHOR_MODEL?.trim() || DRAFT_MODEL,DRAFT_TIMEOUT_MS, lessonJsonSchema() as unknown as Record<string, unknown>)
+      const draft = await draftLesson(model, file, (attempt, waitMs) =>
+        setRetryNote(`The model is busy. Trying again in ${waitMs / 1000} s (retry ${attempt} of ${RETRY_DELAYS_MS.length})...`),
+      )
       setLesson(draft.lesson)
       setNotes(draft.notes)
       setDirty(false)
@@ -84,6 +87,7 @@ export default function AuthorPage() {
       setDraftError(describeError(e))
     } finally {
       setBusy(false)
+      setRetryNote(null)
     }
   }
 
@@ -151,7 +155,7 @@ export default function AuthorPage() {
         </div>
         {busy && (
           <p role="status" className="mt-3 font-bold text-teal">
-            The cloud model is reading the PDF. This can take a couple of minutes.
+            {retryNote ?? 'The cloud model is reading the PDF. This can take a couple of minutes.'}
           </p>
         )}
         {draftError && (

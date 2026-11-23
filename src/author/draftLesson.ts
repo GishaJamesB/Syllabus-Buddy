@@ -59,12 +59,44 @@ export type CloudModel = {
   generateContent: (request: Part[]) => Promise<{ response: { text: () => string } }>
 }
 
-export async function draftLesson(model: CloudModel, file: File): Promise<Draft> {
+export const RETRY_DELAYS_MS = [5_000, 15_000, 30_000]
+
+export function isBusyError(e: unknown): boolean {
+  const msg = e instanceof Error ? e.message : String(e)
+  return /\[(500|503)\b|high demand|overloaded|unavailable/i.test(msg)
+}
+
+export async function withBusyRetry<T>(
+  call: () => Promise<T>,
+  onRetry: (attempt: number, waitMs: number) => void = () => {},
+  sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms)),
+): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await call()
+    } catch (e) {
+      const waitMs = RETRY_DELAYS_MS[attempt]
+      if (waitMs === undefined || !isBusyError(e)) throw e
+      onRetry(attempt + 1, waitMs)
+      await sleep(waitMs)
+    }
+  }
+}
+
+export async function draftLesson(
+  model: CloudModel,
+  file: File,
+  onRetry?: (attempt: number, waitMs: number) => void,
+): Promise<Draft> {
   const base64 = toBase64(new Uint8Array(await file.arrayBuffer()))
-  const { response } = await model.generateContent([
-    { type: 'text', text: buildPrompt() },
-    { type: 'inlineData', inlineData: { mimeType: 'application/pdf', data: base64 } },
-  ])
+  const { response } = await withBusyRetry(
+    () =>
+      model.generateContent([
+        { type: 'text', text: buildPrompt() },
+        { type: 'inlineData', inlineData: { mimeType: 'application/pdf', data: base64 } },
+      ]),
+    onRetry,
+  )
   return parseDraft(response.text())
 }
 
