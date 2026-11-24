@@ -5,7 +5,7 @@ import { describeError, SETUP_GUIDE } from '../firebase/describeError'
 import { lessonJsonSchema, renumber, validateLesson, type Idea, type Lesson, type LessonIssue } from '../content/lessonSchema'
 import { checkPdfFile, draftLesson, DRAFT_MODEL, DRAFT_TIMEOUT_MS, RETRY_DELAYS_MS } from './draftLesson'
 import { IdeaCard } from './IdeaCard'
-import { Confetti } from './Confetti'
+import { Confetti } from '../ui/Confetti'
 
 const configResult = readConfig(import.meta.env as Record<string, string | undefined>)
 

@@ -2,7 +2,7 @@ import type { MISCONCEPTIONS } from '../ai/turnSchema'
 
 export type Difficulty = 'easy' | 'medium' | 'hard'
 export type Topic = 'perimeter' | 'area'
-export type Unit = 'cm' | 'm' | 'sq cm' | 'sq m' | '₹'
+export type Unit = 'cm' | 'm' | 'sq cm' | 'sq m' | 'S$'
 export type MistakeCode = (typeof MISCONCEPTIONS)[number]
 
 export interface Answer {
@@ -71,5 +71,5 @@ export function diagramLabels(spec: DiagramSpec): string[] {
 }
 
 export function formatAnswer(answer: Answer): string {
-  return answer.unit === '₹' ? `₹${answer.value}` : `${answer.value} ${answer.unit}`
+  return answer.unit === 'S$' ? `S$${answer.value}` : `${answer.value} ${answer.unit}`
 }

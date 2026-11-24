@@ -172,15 +172,15 @@ const perimFencingCost: Template = {
     const rate = rng.pick([5, 10, 20, 25, 50])
     const p = 2 * (l + b)
     return {
-      prompt: `A rectangular field is ${l} m long and ${b} m wide. Fencing costs ₹${rate} per metre. What is the total cost of fencing all around it?`,
+      prompt: `A rectangular field is ${l} m long and ${b} m wide. Fencing costs S$${rate} per metre. What is the total cost of fencing all around it?`,
       dims: [l, b],
       numbers: { length: l, breadth: b, rate },
-      answer: { value: p * rate, unit: '₹' },
+      answer: { value: p * rate, unit: 'S$' },
       steps: [
         'Fencing goes all around, so first find the perimeter.',
         `Perimeter = 2 × (${l} + ${b}) = ${p}.`,
         `Cost = perimeter × rate = ${p} × ${rate} = ${p * rate}.`,
-        `The total cost is ₹${p * rate}.`,
+        `The total cost is S$${p * rate}.`,
       ],
       diagram: {
         kind: 'rectangle',

@@ -96,15 +96,23 @@ describe('grader matrix', () => {
     const v = String(cost.answer.value)
     expect(grade(cost, { text: v, unit: 'cm' })).toMatchObject({ correct: false, code: null, reason: 'unit_mismatch' })
     const area = generate('area_rectangle', 'easy', 9)
-    expect(grade(area, { text: String(area.answer.value), unit: '₹' })).toMatchObject({ correct: false, code: null, reason: 'unit_mismatch' })
+    expect(grade(area, { text: String(area.answer.value), unit: 'S$' })).toMatchObject({ correct: false, code: null, reason: 'unit_mismatch' })
   })
-  it('accepts commas, spaces and the rupee sign', () => {
+  it('accepts commas, spaces and the dollar prefixes', () => {
     const cost = find('perim_fencing_cost', (q) => q.answer.value >= 1000)
     const v = String(cost.answer.value)
     const withComma = v.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
-    expect(grade(cost, { text: withComma, unit: '₹' }).correct).toBe(true)
-    expect(grade(cost, { text: `₹${v}`, unit: '₹' }).correct).toBe(true)
-    expect(grade(cost, { text: ` ${v} `, unit: '₹' }).correct).toBe(true)
+    expect(cost.answer.unit).toBe('S$')
+    expect(formatAnswer(cost.answer)).toBe(`S$${v}`)
+    for (const text of [withComma, `S$${v}`, `s$${v}`, `$${v}`, `SGD ${v}`, `sgd${v}`, ` ${v} `, `S$ ${withComma}`]) {
+      expect(grade(cost, { text, unit: 'S$' }).correct).toBe(true)
+    }
+    expect(grade(cost, { text: `S$${v}.50`, unit: 'S$' }).reason).toBe('not_a_number')
+    expect(grade(cost, { text: '1sgd2', unit: 'S$' }).reason).toBe('not_a_number')
+  })
+  it('does not strip a dollar sign on a length question', () => {
+    const perim = generate('perim_rectangle', 'easy', 1)
+    expect(grade(perim, { text: '$12', unit: 'cm' }).reason).toBe('not_a_number')
   })
   it('lets a number error win over a unit error', () => {
     const q = generate('area_rectangle', 'easy', 9)

@@ -10,7 +10,8 @@ function unitKind(unit: Unit): 'area' | 'length' | 'money' {
 }
 
 export function grade(question: Question, input: { text: string; unit?: Unit | null }): GradeResult {
-  const text = input.text.replace(/[,\s₹]/g, '')
+  let text = input.text.replace(/[,\s]/g, '')
+  if (question.answer.unit === 'S$') text = text.replace(/^(sgd|s\$|\$)/i, '')
   if (!/^\d+$/.test(text)) return { correct: false, code: null, reason: 'not_a_number' }
   const value = Number(text)
 
