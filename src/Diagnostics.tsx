@@ -4,6 +4,7 @@ import { initFirebase, type FirebaseServices } from './firebase/init'
 import { getOnDeviceStatus, prepareOnDeviceModel, type OnDeviceStatus } from './ai/onDeviceStatus'
 import { MISCONCEPTIONS, parseTurn, type ParseResult } from './ai/turnSchema'
 import { describeError, SETUP_GUIDE } from './firebase/describeError'
+import { TUNING_KEYS } from './config/tuning'
 
 const SAMPLE_REPLY = 'I added 5 and 3 and got 8'
 
@@ -85,7 +86,7 @@ export default function Diagnostics() {
     }
   }
 
-  const mode = configResult.config.inferenceMode
+  const mode = services?.tuning.values.inference_mode ?? configResult.config.inferenceMode
   const nanoLabel =
     status === null
       ? 'checking'
@@ -98,7 +99,7 @@ export default function Diagnostics() {
   return (
     <main style={page}>
       <h1>Syllabus Buddy spike</h1>
-      <p>Inference mode: <code>{configResult.config.inferenceMode}</code></p>
+      <p>Inference mode: <code>{mode}</code></p>
 
       <section>
         <h2>Auth and App Check</h2>
@@ -108,6 +109,29 @@ export default function Diagnostics() {
           <p>Anonymous user ID: <code>{services.uid}</code></p>
         ) : (
           <p>Signing in...</p>
+        )}
+      </section>
+
+      <section>
+        <h2>Tuning</h2>
+        {services ? (
+          <table>
+            <thead>
+              <tr><th align="left">Key</th><th align="left">Value</th><th align="left">From</th><th align="left">Rejected</th></tr>
+            </thead>
+            <tbody>
+              {TUNING_KEYS.map((k) => (
+                <tr key={k}>
+                  <td><code>{k}</code></td>
+                  <td><code>{String(services.tuning.values[k])}</code></td>
+                  <td>{services.tuning.sources[k]}</td>
+                  <td>{services.tuning.raw[k] !== undefined && <code>{services.tuning.raw[k]}</code>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <p>Waiting for Firebase...</p>
         )}
       </section>
 

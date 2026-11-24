@@ -14,6 +14,8 @@ import {
   ideaMistakeCodes,
   ideaState,
   missCount,
+  MISSES_BEFORE_HELP,
+  needsHelp,
   mistakeHistory,
   newProfile,
   newProgress,
@@ -105,6 +107,19 @@ describe('progress', () => {
     expect(missCount(p, idea1)).toBe(2)
     p = nextQuestion(p, idea1, 2)
     expect(missCount(p, idea1)).toBe(0)
+  })
+
+  it('needs help once the misses reach the threshold, which defaults to MISSES_BEFORE_HELP', () => {
+    let p = newProgress(lesson, 0)
+    p = answer(p, 0, '1', 'cm')
+    p = answer(p, 0, '2', 'cm')
+    expect(needsHelp(p, idea1, 2)).toBe(true)
+    expect(needsHelp(p, idea1, 3)).toBe(false)
+    expect(needsHelp(p, idea1)).toBe(MISSES_BEFORE_HELP <= 2)
+    p = answer(p, 0, '3', 'cm')
+    expect(needsHelp(p, idea1)).toBe(true)
+    p = nextQuestion(p, idea1, 2)
+    expect(needsHelp(p, idea1, 1)).toBe(false)
   })
 
   it('shows steps then moves to a fresh question with a different answer', () => {

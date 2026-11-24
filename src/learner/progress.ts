@@ -162,6 +162,10 @@ export function missCount(progress: Progress, idea: Idea): number {
   ).length
 }
 
+export function needsHelp(progress: Progress, idea: Idea, threshold = MISSES_BEFORE_HELP): boolean {
+  return missCount(progress, idea) >= threshold
+}
+
 export const isPassed = (progress: Progress, ideaId: string): boolean => progress.passedIdeaIds.includes(ideaId)
 
 export function passingAttempt(progress: Progress, idea: Idea): Attempt | null {

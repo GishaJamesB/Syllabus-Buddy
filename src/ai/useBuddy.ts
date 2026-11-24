@@ -4,6 +4,9 @@ import { askTurn, missTurn, type AskTurn, type BuddyReply, type MissTurn, type T
 import { getOnDeviceStatus, type OnDeviceStatus } from './onDeviceStatus'
 import type { FunctionDeclaration } from 'firebase/ai'
 import type { TutorModel } from './tutorAgent'
+import { DEFAULT_TUNING, type TuningValues } from '../config/tuning'
+import { readConfig, type AppConfig } from '../firebase/config'
+import type { FirebaseServices } from '../firebase/init'
 
 export type DeviceTurnModel = TurnModel & {
   initializeDeviceModel?(onProgress?: (progress: number) => void): Promise<void>
@@ -13,7 +16,9 @@ export interface BuddyBackend {
   mode: InferenceModeValue
   createTurnModel(): DeviceTurnModel
   createTutorModel?(tools: FunctionDeclaration[]): TutorModel
+  createSummaryModel?(): TurnModel
   onDeviceStatus(): Promise<OnDeviceStatus>
+  tuning?: TuningValues
 }
 
 export type BrainStatus =
@@ -27,12 +32,15 @@ export interface BuddyService {
   subscribe(listener: () => void): () => void
   model(): Promise<TurnModel>
   tutorModel(tools: FunctionDeclaration[]): Promise<TutorModel>
+  summaryModel(): Promise<TurnModel>
+  tuning(): TuningValues
   downloadDeviceModel(): Promise<void>
 }
 
 export function createBuddyService(load: () => Promise<BuddyBackend>): BuddyService {
   let current: BrainStatus = { phase: 'starting' }
   let backend: Promise<BuddyBackend> | null = null
+  let tuning: TuningValues = DEFAULT_TUNING
   const listeners = new Set<() => void>()
 
   const set = (next: BrainStatus) => {
@@ -45,6 +53,7 @@ export function createBuddyService(load: () => Promise<BuddyBackend>): BuddyServ
       const attempt = (async () => {
         const b = await load()
         const nano = await b.onDeviceStatus().catch((): OnDeviceStatus => 'unavailable')
+        tuning = b.tuning ?? { ...DEFAULT_TUNING, inference_mode: b.mode }
         set({ phase: 'ready', mode: b.mode, nano, download: null })
         return b
       })()
@@ -75,6 +84,14 @@ export function createBuddyService(load: () => Promise<BuddyBackend>): BuddyServ
       if (!b.createTutorModel) throw new Error('The tutor model is not available')
       return b.createTutorModel(tools)
     },
+    async summaryModel() {
+      const b = await start()
+      if (current.phase !== 'ready' || current.nano !== 'available' || CLOUD_MODES.includes(b.mode) || !b.createSummaryModel) {
+        throw new Error('The on-device summary model is not available')
+      }
+      return b.createSummaryModel()
+    },
+    tuning: () => tuning,
     async downloadDeviceModel() {
       const b = await start()
       const model = b.createTurnModel()
@@ -96,21 +113,28 @@ export function createBuddyService(load: () => Promise<BuddyBackend>): BuddyServ
 }
 
 async function loadFirebaseBackend(): Promise<BuddyBackend> {
-  const { readConfig } = await import('../firebase/config')
   const result = readConfig(import.meta.env as Record<string, string | undefined>)
   if (!result.ok) throw new Error(`Missing environment variables: ${result.missing.join(', ')}`)
   const { initFirebase } = await import('../firebase/init')
   const { describeError } = await import('../firebase/describeError')
   try {
-    const services = await initFirebase(result.config)
-    return {
-      mode: result.config.inferenceMode,
-      createTurnModel: () => services.createTurnModel(),
-      createTutorModel: (tools) => services.createTutorModel(result.config.tutorModel, tools),
-      onDeviceStatus: getOnDeviceStatus,
-    }
+    return backendFrom(await initFirebase(result.config), result.config)
   } catch (e) {
     throw new Error(describeError(e))
+  }
+}
+
+export function backendFrom(
+  services: Pick<FirebaseServices, 'tuning' | 'createTurnModel' | 'createTutorModel' | 'createSummaryModel'>,
+  config: Pick<AppConfig, 'tutorModel'>,
+): BuddyBackend {
+  return {
+    mode: services.tuning.values.inference_mode,
+    tuning: services.tuning.values,
+    createTurnModel: () => services.createTurnModel(),
+    createTutorModel: (tools) => services.createTutorModel(config.tutorModel, tools),
+    createSummaryModel: () => services.createSummaryModel(),
+    onDeviceStatus: getOnDeviceStatus,
   }
 }
 

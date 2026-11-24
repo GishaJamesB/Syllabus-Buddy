@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { ASK_MAX } from '../ai/buddy'
 import { brainRow, usesCloud, type BrainStatus, type BuddyView } from '../ai/useBuddy'
+import { ReadAloud } from '../ui/ReadAloud'
 import { field, softBtn } from './styles'
 
 interface Props {
@@ -33,7 +34,12 @@ function Reply({ view, ideaTitle, previousTitle, onGoBack }: Omit<Props, 'brain'
         <Badge source={reply.source} />
       </p>
       {asked && reply.intent === 'off_topic' && <p>Let's get back to {ideaTitle}!</p>}
-      {reply.clue && <p>{reply.clue}</p>}
+      {reply.clue && (
+        <div className="flex flex-wrap items-center gap-3">
+          <p>{reply.clue}</p>
+          <ReadAloud key={reply.clue} label="Read Buddy's clue aloud" parts={[reply.clue]} />
+        </div>
+      )}
       {asked && reply.intent === 'review_previous' && previousTitle && (
         <button type="button" className={softBtn} onClick={onGoBack}>
           Go back to: {previousTitle}

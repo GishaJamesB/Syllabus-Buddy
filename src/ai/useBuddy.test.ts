@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { InferenceModeValue } from '../firebase/config'
 import type { OnDeviceStatus } from './onDeviceStatus'
+import { DEFAULT_TUNING } from '../config/tuning'
 import { brainRow, createBuddyService, usesCloud, type BrainStatus, type BuddyBackend } from './useBuddy'
 
 const ready = (mode: InferenceModeValue, nano: OnDeviceStatus, download: number | null = null): BrainStatus => ({
@@ -55,5 +56,51 @@ describe('createBuddyService', () => {
     expect(load).toHaveBeenCalledTimes(2)
     expect(service.status()).toEqual(ready('prefer_on_device', 'available'))
     warn.mockRestore()
+  })
+})
+
+describe('summaryModel', () => {
+  const backendWith = (mode: InferenceModeValue, nano: OnDeviceStatus) => {
+    const createSummaryModel = vi.fn(() => ({ generateContent: vi.fn() }))
+    const backend: BuddyBackend = {
+      mode,
+      onDeviceStatus: async () => nano,
+      createTurnModel: () => ({ generateContent: vi.fn() }),
+      createSummaryModel,
+    }
+    return { service: createBuddyService(async () => backend), createSummaryModel }
+  }
+
+  it.each([
+    ['only_in_cloud', 'available'],
+    ['prefer_in_cloud', 'available'],
+    ['prefer_on_device', 'downloadable'],
+    ['only_on_device', 'downloadable'],
+    ['prefer_on_device', 'unavailable'],
+  ] as [InferenceModeValue, OnDeviceStatus][])('never builds the summary model in %s with %s', async (mode, nano) => {
+    const { service, createSummaryModel } = backendWith(mode, nano)
+    await expect(service.summaryModel()).rejects.toThrow()
+    expect(createSummaryModel).not.toHaveBeenCalled()
+  })
+
+  it.each(['prefer_on_device', 'only_on_device'] as InferenceModeValue[])('builds it when Nano is available in %s', async (mode) => {
+    const { service, createSummaryModel } = backendWith(mode, 'available')
+    await expect(service.summaryModel()).resolves.toBeTruthy()
+    expect(createSummaryModel).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('tuning', () => {
+  it('uses the defaults until the backend is ready, then the backend tuning', async () => {
+    const tuning = { ...DEFAULT_TUNING, misses_before_help: 2 }
+    const service = createBuddyService(async () => ({
+      mode: 'prefer_on_device',
+      tuning,
+      onDeviceStatus: async () => 'available',
+      createTurnModel: () => ({ generateContent: vi.fn() }),
+    }))
+    expect(service.tuning()).toBe(DEFAULT_TUNING)
+    await service.model()
+    expect(service.tuning()).toBe(tuning)
   })
 })

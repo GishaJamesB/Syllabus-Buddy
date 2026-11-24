@@ -10,8 +10,20 @@ import {
   ThinkingLevel,
   type FunctionDeclaration,
 } from 'firebase/ai'
+import { activate, ensureInitialized, fetchConfig, getRemoteConfig, getValue, isSupported } from 'firebase/remote-config'
 import type { AppConfig, InferenceModeValue } from './config'
 import { turnJsonSchema } from '../ai/turnSchema'
+import { withTimeout } from '../ai/buddy'
+import {
+  allDefaults,
+  defaultTuning,
+  remoteDefaults,
+  TUNING_KEYS,
+  tuningState,
+  type TuningKey,
+  type TuningState,
+  type TuningValues,
+} from '../config/tuning'
 
 const CLOUD_TIMEOUT_MS = 30_000
 
@@ -25,9 +37,39 @@ const MODES: Record<InferenceModeValue, InferenceMode> = {
 export interface FirebaseServices {
   app: FirebaseApp
   uid: string
+  tuning: TuningState
   createTurnModel: () => ReturnType<typeof getGenerativeModel>
   createAuthorModel: (model: string, timeoutMs: number, responseJsonSchema: Record<string, unknown>) => ReturnType<typeof getGenerativeModel>
   createTutorModel: (model: string, tools: FunctionDeclaration[]) => ReturnType<typeof getGenerativeModel>
+  createSummaryModel: () => ReturnType<typeof getGenerativeModel>
+}
+
+export const TUNING_TIMEOUT_MS = 3000
+
+export async function loadTuning(app: FirebaseApp, defaults: TuningValues, timeoutMs = TUNING_TIMEOUT_MS): Promise<TuningState> {
+  try {
+    return await withTimeout(readTuning(app, defaults), timeoutMs)
+  } catch {
+    return allDefaults(defaults)
+  }
+}
+
+async function readTuning(app: FirebaseApp, defaults: TuningValues): Promise<TuningState> {
+  if (!(await isSupported())) return allDefaults(defaults)
+  const rc = getRemoteConfig(app)
+  rc.defaultConfig = remoteDefaults(defaults)
+  rc.settings = { minimumFetchIntervalMillis: import.meta.env.DEV ? 0 : 3_600_000, fetchTimeoutMillis: 5000 }
+  await ensureInitialized(rc)
+  await activate(rc)
+  void fetchConfig(rc).catch(() => {})
+  const raw: Partial<Record<TuningKey, string>> = {}
+  const remote = new Set<TuningKey>()
+  for (const key of TUNING_KEYS) {
+    const value = getValue(rc, key)
+    raw[key] = value.asString()
+    if (value.getSource() === 'remote') remote.add(key)
+  }
+  return tuningState(raw, remote, defaults)
 }
 
 export async function initFirebase(config: AppConfig): Promise<FirebaseServices> {
@@ -45,12 +87,14 @@ export async function initFirebase(config: AppConfig): Promise<FirebaseServices>
 
   const cred = await signInAnonymously(getAuth(app))
 
+  const tuning = await loadTuning(app, defaultTuning(config.inferenceMode))
+
   const ai = getAI(app, { backend: new GoogleAIBackend() })
   const createTurnModel = () =>
     getGenerativeModel(
       ai,
       {
-        mode: MODES[config.inferenceMode],
+        mode: MODES[tuning.values.inference_mode],
         onDeviceParams: {
           createOptions: {
             expectedInputs: [{ type: 'text', languages: ['en'] }],
@@ -98,5 +142,16 @@ export async function initFirebase(config: AppConfig): Promise<FirebaseServices>
       { timeout: CLOUD_TIMEOUT_MS },
     )
 
-  return { app, uid: cred.user.uid, createTurnModel, createAuthorModel, createTutorModel }
+  const createSummaryModel = () =>
+    getGenerativeModel(ai, {
+      mode: InferenceMode.ONLY_ON_DEVICE,
+      onDeviceParams: {
+        createOptions: {
+          expectedInputs: [{ type: 'text', languages: ['en'] }],
+          expectedOutputs: [{ type: 'text', languages: ['en'] }],
+        },
+      },
+    })
+
+  return { app, uid: cred.user.uid, tuning, createTurnModel, createAuthorModel, createTutorModel, createSummaryModel }
 }

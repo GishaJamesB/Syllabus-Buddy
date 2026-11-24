@@ -179,6 +179,17 @@ describe('timer', () => {
     expect(timeLimitFor([{ ...qs[0], difficulty: 'easy' }, { ...qs[1], difficulty: 'hard' }])).toBe(90 + 150)
   })
 
+  it('uses tuned seconds for new tests and keeps a started test on its stored limit', () => {
+    const qs = buildTest(lesson, newProgress(lesson, 0), seeded(1))
+    const tuned = { easy: 60, medium: 60, hard: 60 }
+    expect(timeLimitFor([{ ...qs[0], difficulty: 'easy' }], tuned)).toBe(60)
+    const running = newTest(qs, 1000)
+    const fresh = newTest(qs, 1000, Math.random, tuned)
+    expect(fresh.timeLimitS).toBe(600)
+    expect(running.timeLimitS).toBe(1200)
+    expect(remainingMs(running, 1000)).toBe(1200_000)
+  })
+
   it('gives each new test a distinct id even at the same moment', () => {
     const qs = buildTest(lesson, newProgress(lesson, 0), seeded(1))
     expect(newTest(qs, 5).id).not.toBe(newTest(qs, 5).id)

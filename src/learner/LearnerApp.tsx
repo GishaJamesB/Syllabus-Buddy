@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
 import lessonJson from '../content/ch6.lesson.json'
 import { validateLesson, type Lesson } from '../content/lessonSchema'
 import type { BuddyReply } from '../ai/buddy'
+import { testSeconds, TuningContext } from '../config/tuning'
 import {
   brainRow,
   firebaseBuddy,
@@ -16,6 +17,7 @@ import { CompleteScreen } from './CompleteScreen'
 import { feedbackFor } from './feedback'
 import { IdeaScreen } from './IdeaScreen'
 import { NicknameScreen } from './NicknameScreen'
+import { ParentPanel } from './ParentPanel'
 import {
   goTo,
   ideaMistakeCodes,
@@ -71,7 +73,7 @@ interface Props {
 
 type View =
   | { kind: 'lesson' }
-  | { kind: 'test'; running: boolean; plan: TestQuestionRef[] | null }
+  | { kind: 'test'; running: boolean; plan: { questions: TestQuestionRef[]; timeLimitS: number } | null }
   | { kind: 'results'; testId: string }
 
 const defaultOpen = () => openStore()
@@ -107,8 +109,12 @@ export default function LearnerApp({
   const [profile, setProfile] = useState<Profile | null>(null)
   const [view, setView] = useState<View>({ kind: 'lesson' })
   const [tutorRunning, setTutorRunning] = useState(false)
+  const [grownUps, setGrownUps] = useState(false)
+  const grownUpsButton = useRef<HTMLButtonElement>(null)
   const current = useRef<Profile | null>(null)
   const brain = useBrainStatus(buddy)
+  const tuning = buddy.tuning()
+  const seconds = testSeconds(tuning)
   const turns = useBuddyTurns({
     service: buddy,
     currentContext: () => {
@@ -221,6 +227,7 @@ export default function LearnerApp({
     turns.clear()
     setView({ kind: 'lesson' })
     setTutorRunning(false)
+    setGrownUps(false)
     show(null)
     try {
       setProfiles(await activeStore.listProfiles())
@@ -239,15 +246,20 @@ export default function LearnerApp({
     update((progress, at) => finishDueTest(progress, at))
     const after = current.current?.progress ?? p.progress
     if (due && !unfinishedTest(after)) return setView({ kind: 'results', testId: due.id })
-    setView({ kind: 'test', running: false, plan: due ? null : buildTest(activeLesson, after, random) })
+    const questions = due ? null : buildTest(activeLesson, after, random)
+    setView({ kind: 'test', running: false, plan: questions && { questions, timeLimitS: timeLimitFor(questions, seconds) } })
   }
 
   function beginTest() {
     const p = current.current
     if (!p) return
     if (!unfinishedTest(p.progress)) {
-      const questions = (view.kind === 'test' && view.plan) || buildTest(activeLesson, p.progress, random)
-      update((progress, at) => saveTest(progress, newTest(questions, at, random), at))
+      const plan = view.kind === 'test' ? view.plan : null
+      const questions = plan?.questions ?? buildTest(activeLesson, p.progress, random)
+      update((progress, at) => {
+        const test = newTest(questions, at, random, seconds)
+        return saveTest(progress, plan ? { ...test, timeLimitS: plan.timeLimitS } : test, at)
+      })
     }
     setView({ kind: 'test', running: true, plan: null })
   }
@@ -279,7 +291,7 @@ export default function LearnerApp({
     body = (
       <TestStart
         history={finishedTests(profile.progress)}
-        timeLimitS={view.plan ? timeLimitFor(view.plan) : null}
+        timeLimitS={view.plan?.timeLimitS ?? null}
         remainingMs={openRecord ? remainingMs(openRecord, now()) : null}
         onBegin={beginTest}
       />
@@ -370,10 +382,22 @@ export default function LearnerApp({
             }
           : undefined
       }
+      grownUps={profile ? { open: grownUps, onClick: () => setGrownUps((o) => !o), ref: grownUpsButton } : undefined}
       banner={banner}
       credit={lesson.source.credit}
     >
-      {body}
+      <TuningContext.Provider value={tuning}>
+        <div className="space-y-5">
+          {grownUps && profile && (
+            <ParentPanel key={profile.id} profile={profile} lesson={lesson} buddy={buddy} onClose={() => {
+                setGrownUps(false)
+                grownUpsButton.current?.focus()
+              }}
+            />
+          )}
+          {body}
+        </div>
+      </TuningContext.Provider>
     </Shell>
   )
 }
@@ -383,11 +407,12 @@ interface ShellProps {
   learner?: string | null
   onSwitch?: () => void
   testButton?: { label: string; onClick: () => void; disabled: boolean }
+  grownUps?: { open: boolean; onClick: () => void; ref: RefObject<HTMLButtonElement | null> }
   banner?: boolean
   credit?: string
 }
 
-function Shell({ children, learner = null, onSwitch, testButton, banner = false, credit }: ShellProps) {
+function Shell({ children, learner = null, onSwitch, testButton, grownUps, banner = false, credit }: ShellProps) {
   return (
     <div className="min-h-screen font-sans">
       <header className="bg-purple text-white shadow-card">
@@ -399,6 +424,11 @@ function Shell({ children, learner = null, onSwitch, testButton, banner = false,
               {testButton && (
                 <button type="button" className={smallBtn} onClick={testButton.onClick} disabled={testButton.disabled}>
                   {testButton.label}
+                </button>
+              )}
+              {grownUps && (
+                <button ref={grownUps.ref} type="button" className={smallBtn} onClick={grownUps.onClick} aria-pressed={grownUps.open}>
+                  For grown-ups
                 </button>
               )}
               <button type="button" className={smallBtn} onClick={onSwitch}>

@@ -4,7 +4,9 @@ import type { Idea } from '../content/lessonSchema'
 import { Diagram } from '../diagrams/Diagram'
 import { grade } from '../maths/grade'
 import type { GradeResult, Question, Unit } from '../maths/types'
+import { useTuning } from '../config/tuning'
 import { Confetti } from '../ui/Confetti'
+import { ReadAloud } from '../ui/ReadAloud'
 import { AnswerBox } from './AnswerBox'
 import { BuddyPanel } from './BuddyPanel'
 import { feedbackFor, type Feedback } from './feedback'
@@ -16,7 +18,7 @@ import {
   ideaState,
   isPassed,
   missCount,
-  MISSES_BEFORE_HELP,
+  needsHelp,
   passingAttempt,
   workedExample,
   type Progress,
@@ -78,6 +80,11 @@ export function IdeaScreen({
   const passed = isPassed(progress, idea.id)
   const passedWith = passingAttempt(progress, idea)
   const misses = missCount(progress, idea)
+  const tuning = useTuning()
+  const frozen = useRef<{ seed: number; threshold: number } | null>(null)
+  if (frozen.current?.seed !== questionSeed) frozen.current = { seed: questionSeed, threshold: tuning.misses_before_help }
+  const threshold = frozen.current.threshold
+  const stuck = needsHelp(progress, idea, threshold)
   const isLast = index === total - 1
   const shownFeedback = feedback?.seed === questionSeed ? feedback.value : null
   const tutorOn = tutor !== undefined && tutorRun?.seed === questionSeed
@@ -111,7 +118,14 @@ export function IdeaScreen({
       setCelebrate((c) => c + 1)
     }
     const counted = !result.correct && result.reason !== 'not_a_number'
-    if (tutor && counted && misses + 1 === MISSES_BEFORE_HELP && tutorRun?.seed !== questionSeed) {
+    if (
+      tutor &&
+      counted &&
+      misses + 1 >= threshold &&
+      tutorRun?.seed !== questionSeed &&
+      !tutorRunning &&
+      !hasTutorSession(progress, idea.id, questionSeed)
+    ) {
       setTutorRun({ seed: questionSeed, failed: false })
     }
     onAnswer(input, result, question)
@@ -148,9 +162,12 @@ export function IdeaScreen({
       </div>
 
       <section className={card}>
-        <h2 ref={heading} tabIndex={-1} className="text-3xl font-extrabold text-purple focus:outline-none">
-          {idea.title}
-        </h2>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <h2 ref={heading} tabIndex={-1} className="text-3xl font-extrabold text-purple focus:outline-none">
+            {idea.title}
+          </h2>
+          <ReadAloud label="Read the idea aloud" parts={[idea.title, idea.explanation, ...idea.keyPoints]} />
+        </div>
         <p className="mt-3 text-lg leading-relaxed">{idea.explanation}</p>
         <ul className="mt-4 space-y-2">
           {idea.keyPoints.map((k, i) => (
@@ -162,9 +179,12 @@ export function IdeaScreen({
       </section>
 
       <section className={card} aria-labelledby="worked-heading">
-        <h3 id="worked-heading" className="text-2xl font-extrabold text-teal">
-          Worked example
-        </h3>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <h3 id="worked-heading" className="text-2xl font-extrabold text-teal">
+            Worked example
+          </h3>
+          <ReadAloud key={questionSeed} label="Read the worked example aloud" parts={[worked.prompt, ...worked.steps]} />
+        </div>
         <p className="mt-2 text-lg font-bold">{worked.prompt}</p>
         {idea.diagram && (
           <div className="mx-auto mt-3 max-w-sm text-ink">
@@ -243,13 +263,13 @@ export function IdeaScreen({
           />
         )}
 
-        {tutor && !tutorOn && !passed && !stepsShown && misses >= MISSES_BEFORE_HELP && !hasTutorSession(progress, idea.id, questionSeed) && (
+        {tutor && !tutorOn && !passed && !stepsShown && stuck && !hasTutorSession(progress, idea.id, questionSeed) && (
           <button type="button" className={softBtn} onClick={() => setTutorRun({ seed: questionSeed, failed: false })}>
             Ask the Tutor
           </button>
         )}
 
-        {!passed && !stepsShown && !tutorActive && misses >= MISSES_BEFORE_HELP && (
+        {!passed && !stepsShown && !tutorActive && stuck && (
           <button type="button" className={softBtn} onClick={onShowSteps}>
             Show me how
           </button>

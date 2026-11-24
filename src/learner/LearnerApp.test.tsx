@@ -16,6 +16,7 @@ import { grade } from '../maths/grade'
 import { memoryStore, openStore, type Store } from './store'
 import { testQuestion, type TestRecord } from './test'
 import { createRng } from '../maths/rng'
+import { DEFAULT_TUNING, type TuningValues } from '../config/tuning'
 
 const lesson = lessonJson as Lesson
 let n = 0
@@ -241,18 +242,29 @@ interface FakeOptions {
   mode?: InferenceModeValue
   nano?: OnDeviceStatus
   load?: Promise<void>
+  tuning?: Partial<TuningValues>
+  summary?: () => Promise<string>
 }
 
-function fakeBuddy({ mode = 'prefer_on_device', nano = 'available', load }: FakeOptions = {}) {
+function fakeBuddy({ mode = 'prefer_on_device', nano = 'available', load, tuning, summary }: FakeOptions = {}) {
   const prompts: string[] = []
   const pending: { resolve: (a: Answer) => void }[] = []
   let deviceProgress: ((p: number) => void) | null = null
   let finishDownload: (() => void) | null = null
   let status = nano
+  const summaryPrompts: string[] = []
+  const createSummaryModel = vi.fn(() => ({
+    generateContent(prompt: string) {
+      summaryPrompts.push(prompt)
+      return (summary ?? (() => Promise.reject(new Error('no summary'))))().then((text) => ({ response: { text: () => text } }))
+    },
+  }))
   const service = createBuddyService(async () => {
     await load
     return {
       mode,
+      tuning: { ...DEFAULT_TUNING, inference_mode: mode, ...tuning },
+      createSummaryModel,
       onDeviceStatus: async () => status,
       createTurnModel: () => ({
         generateContent(prompt: string) {
@@ -277,6 +289,8 @@ function fakeBuddy({ mode = 'prefer_on_device', nano = 'available', load }: Fake
   return {
     service,
     prompts,
+    summaryPrompts,
+    createSummaryModel,
     async reply(answer: Answer, index?: number) {
       await act(async () => {})
       await act(async () => {
@@ -601,11 +615,12 @@ describe('Buddy', () => {
 
 type TutorStep = { calls?: { name: string; args?: Record<string, unknown> }[]; text?: string } | Error | 'hang'
 
-function tutorBuddy(script: TutorStep[], mode: InferenceModeValue = 'prefer_on_device') {
+function tutorBuddy(script: TutorStep[], mode: InferenceModeValue = 'prefer_on_device', tuning?: Partial<TuningValues>) {
   const requests: unknown[] = []
   const system: string[] = []
   const service = createBuddyService(async () => ({
     mode,
+    tuning: { ...DEFAULT_TUNING, inference_mode: mode, ...tuning },
     onDeviceStatus: async () => 'available' as const,
     createTurnModel: () => ({ generateContent: () => Promise.reject(new Error('offline')) }),
     createTutorModel: () => ({
@@ -723,6 +738,26 @@ describe('Tutor', () => {
       history: {},
       maxTurns: 5,
     })
+  })
+
+  it('escalates after the tuned misses and stops after the tuned max turns', async () => {
+    const tutor = tutorBuddy(
+      Array.from({ length: 5 }, () => ({ calls: [{ name: 'getMistakeHistory' }] })),
+      'prefer_on_device',
+      { misses_before_help: 2, max_turns: 2 },
+    )
+    const open = dbOpener()
+    await start(open, lessonJson, tutor.service)
+    await act(async () => {})
+    await addNickname('Riya')
+    await screen.findByText('Idea 1 of 7')
+    type('999999', 'cm')
+    expect(screen.queryByText('☁️ Tutor')).toBeNull()
+    type('999999', 'cm')
+    expect(screen.getByText('☁️ Tutor')).toBeTruthy()
+    await screen.findByRole('button', { name: 'Try a new question' })
+    expect(tutor.requests).toHaveLength(2)
+    expect(JSON.parse(tutor.requests[0] as string)).toMatchObject({ misses: 2, maxTurns: 2 })
   })
 
   it('shows the worked steps and offers a new question when turns run out', async () => {
@@ -1104,5 +1139,216 @@ describe('Weak-spot test', () => {
     await escalate(tutor)
     await vi.waitFor(() => expect(tutor.requests).toHaveLength(1))
     expect((screen.getByRole('button', { name: 'Test' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+})
+
+describe('Tuning', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('shows "Show me how" after the tuned number of misses', async () => {
+    const buddy = fakeBuddy({ tuning: { misses_before_help: 2 } })
+    await startWith(buddy)
+    await addNickname('Riya')
+    await screen.findByText('Idea 1 of 7')
+    type('999999', 'cm')
+    expect(screen.queryByRole('button', { name: 'Show me how' })).toBeNull()
+    type('999999', 'cm')
+    await act(async () => {})
+    expect(screen.getByRole('button', { name: 'Show me how' })).toBeTruthy()
+  })
+
+  it('applies a threshold that arrives mid-question from the next question', async () => {
+    let ready!: () => void
+    const buddy = fakeBuddy({ tuning: { misses_before_help: 2 }, load: new Promise<void>((r) => (ready = r)) })
+    await start(dbOpener(), lessonJson, buddy.service)
+    await addNickname('Riya')
+    await screen.findByText('Idea 1 of 7')
+    await act(async () => ready())
+    expect(buddy.service.tuning().misses_before_help).toBe(2)
+    type('999999', 'cm')
+    type('999999', 'cm')
+    await act(async () => {})
+    expect(screen.queryByRole('button', { name: 'Show me how' })).toBeNull()
+    type('999999', 'cm')
+    await act(async () => {})
+    fireEvent.click(screen.getByRole('button', { name: 'Show me how' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Try a new question' }))
+    type('999999', 'cm')
+    type('999999', 'cm')
+    await act(async () => {})
+    expect(screen.getByRole('button', { name: 'Show me how' })).toBeTruthy()
+  })
+
+  it('uses the tuned seconds for a new test', async () => {
+    const buddy = fakeBuddy({ tuning: { test_seconds_easy: 60, test_seconds_medium: 60, test_seconds_hard: 60 } })
+    const open = await startWith(buddy)
+    await addNickname('Riya')
+    await screen.findByText('Idea 1 of 7')
+    fireEvent.click(screen.getByRole('button', { name: 'Test' }))
+    expect(await screen.findByText(/You have 10:00 for the whole test/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Begin' }))
+    await screen.findByText('Question 1 of 10')
+    expect(screen.getByRole('timer').textContent).toBe('10:00 left')
+    expect((await saved(open)).progress.tests[0].timeLimitS).toBe(600)
+  })
+
+  it('reads the idea card aloud and shows Stop, with no speaker buttons when speech is missing', async () => {
+    const spoken: string[] = []
+    vi.stubGlobal('speechSynthesis', {
+      speak: (u: { text: string }) => spoken.push(u.text),
+      cancel: () => {},
+      getVoices: () => [],
+    })
+    vi.stubGlobal('SpeechSynthesisUtterance', class { text: string; constructor(t: string) { this.text = t } })
+    await start(dbOpener())
+    await addNickname('Riya')
+    await screen.findByText('Idea 1 of 7')
+    const idea = lesson.ideas[0]
+    const button = screen.getByRole('button', { name: 'Read the idea aloud' })
+    fireEvent.click(button)
+    expect(spoken[0]).toContain(idea.title)
+    expect(spoken.join(' ')).toContain(idea.keyPoints[0].slice(0, 10))
+    expect(button.getAttribute('aria-pressed')).toBe('true')
+    fireEvent.click(button)
+    expect(button.getAttribute('aria-pressed')).toBe('false')
+    cleanup()
+
+    vi.unstubAllGlobals()
+    await start(dbOpener())
+    await addNickname('Riya')
+    await screen.findByText('Idea 1 of 7')
+    expect(screen.queryByRole('button', { name: /aloud/ })).toBeNull()
+  })
+
+  it("stops reading a test question when moving to the next one, and offers to read Buddy's clue", async () => {
+    let cancels = 0
+    vi.stubGlobal('speechSynthesis', { speak: () => {}, cancel: () => cancels++, getVoices: () => [] })
+    vi.stubGlobal('SpeechSynthesisUtterance', class { text: string; constructor(t: string) { this.text = t } })
+    const buddy = fakeBuddy()
+    await startWith(buddy)
+    await addNickname('Riya')
+    await screen.findByText('Idea 1 of 7')
+    type('999999', 'cm')
+    await buddy.reply({ text: json('answer_attempt', null, 'Count every side once.'), source: 'on_device' })
+    expect(screen.getByRole('button', { name: "Read Buddy's clue aloud" })).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Test' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Begin' }))
+    await screen.findByText('Question 1 of 10')
+    fireEvent.click(screen.getByRole('button', { name: 'Read the question aloud' }))
+    expect(screen.getByRole('button', { name: 'Read the question aloud' }).getAttribute('aria-pressed')).toBe('true')
+    const before = cancels
+    fireEvent.click(screen.getByRole('button', { name: 'Skip' }))
+    await screen.findByText('Question 2 of 10')
+    expect(cancels).toBe(before + 1)
+    expect(screen.getByRole('button', { name: 'Read the question aloud' }).getAttribute('aria-pressed')).toBe('false')
+  })
+})
+
+describe('For grown-ups', () => {
+  async function withMistakes(open: () => Promise<Store>) {
+    const p = newProfile('Zanzibar', 'zanzibar', lesson, 0)
+    const attempt = { ideaId: 'idea-1', templateId: 'perim_rectangle', difficulty: 'medium' as const, seed: 1, answerText: '1', unit: 'cm' as const, correct: false, reason: 'wrong_number' as const, at: 1 }
+    p.progress.attempts = [
+      { ...attempt, code: 'perim_two_sides_only' },
+      { ...attempt, code: 'perim_two_sides_only' },
+      { ...attempt, code: 'units_missing' },
+    ]
+    await (await open()).addProfile(p)
+  }
+
+  async function openPanel(nickname = 'Zanzibar') {
+    fireEvent.click(await screen.findByRole('button', { name: nickname }))
+    await screen.findByText('Idea 1 of 7')
+    fireEvent.click(screen.getByRole('button', { name: 'For grown-ups' }))
+    return within(screen.getByRole('region', { name: 'For grown-ups' }))
+  }
+
+  it('says there are no mistakes for a new learner', async () => {
+    await start(dbOpener())
+    await addNickname('Riya')
+    await screen.findByText('Idea 1 of 7')
+    fireEvent.click(screen.getByRole('button', { name: 'For grown-ups' }))
+    const panel = within(screen.getByRole('region', { name: 'For grown-ups' }))
+    expect(panel.getByText('No mistakes recorded yet.')).toBeTruthy()
+    expect(panel.getByText('Ideas passed: 0 of 7')).toBeTruthy()
+  })
+
+  it('lists the mistakes and a 🔒 paragraph written on-device from codes and counts only', async () => {
+    const buddy = fakeBuddy({ summary: async () => 'Your child sometimes adds only two sides.' })
+    const open = dbOpener()
+    await withMistakes(open)
+    await startWith(buddy, open)
+    const panel = await openPanel()
+    expect(panel.getByText('Adds only two sides when finding perimeter (2 times)')).toBeTruthy()
+    expect(panel.getByText('Forgets to write the units (1 time)')).toBeTruthy()
+    expect(await panel.findByText('Your child sometimes adds only two sides.')).toBeTruthy()
+    expect(panel.getByText('🔒 Written on this device')).toBeTruthy()
+    expect(buddy.createSummaryModel).toHaveBeenCalledTimes(1)
+    expect(buddy.summaryPrompts[0]).not.toContain('Zanzibar')
+  })
+
+  it('shows only the list and the note in cloud mode, without building a summary model', async () => {
+    const buddy = fakeBuddy({ mode: 'only_in_cloud', summary: async () => 'never' })
+    const open = dbOpener()
+    await withMistakes(open)
+    await startWith(buddy, open)
+    const panel = await openPanel()
+    expect(panel.getByText('Adds only two sides when finding perimeter (2 times)')).toBeTruthy()
+    expect(panel.getByText('A written summary needs on-device AI in Chrome.')).toBeTruthy()
+    await act(async () => {})
+    expect(buddy.createSummaryModel).not.toHaveBeenCalled()
+    expect(buddy.prompts).toEqual([])
+  })
+
+  it('says the summary failed when the on-device model fails', async () => {
+    const buddy = fakeBuddy({ summary: async () => 'x'.repeat(401) })
+    const open = dbOpener()
+    await withMistakes(open)
+    await startWith(buddy, open)
+    const panel = await openPanel()
+    expect(await panel.findByText("Couldn't write a summary this time.")).toBeTruthy()
+    expect(panel.queryByText('A written summary needs on-device AI in Chrome.')).toBeNull()
+    expect(panel.queryByText('🔒 Written on this device')).toBeNull()
+  })
+
+  it('focuses the heading on open and the button on close', async () => {
+    await start(dbOpener())
+    await addNickname('Riya')
+    await screen.findByText('Idea 1 of 7')
+    const button = screen.getByRole('button', { name: 'For grown-ups' })
+    fireEvent.click(button)
+    expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'For grown-ups' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    expect(screen.queryByRole('region', { name: 'For grown-ups' })).toBeNull()
+    expect(document.activeElement).toBe(button)
+  })
+
+  it('writes the paragraph once Buddy becomes ready after the panel opened', async () => {
+    let ready!: () => void
+    const buddy = fakeBuddy({ summary: async () => 'Ready now.', load: new Promise<void>((r) => (ready = r)) })
+    const open = dbOpener()
+    await withMistakes(open)
+    await start(open, lessonJson, buddy.service)
+    const panel = await openPanel()
+    expect(panel.getByText('A written summary needs on-device AI in Chrome.')).toBeTruthy()
+    await act(async () => ready())
+    expect(await panel.findByText('Ready now.')).toBeTruthy()
+    expect(buddy.createSummaryModel).toHaveBeenCalledTimes(1)
+  })
+
+  it('writes a new paragraph when the mistakes change while open', async () => {
+    let n = 0
+    const buddy = fakeBuddy({ summary: async () => `Summary ${++n}.` })
+    const open = dbOpener()
+    await withMistakes(open)
+    await startWith(buddy, open)
+    const panel = await openPanel()
+    expect(await panel.findByText('Summary 1.')).toBeTruthy()
+    const q = firstQuestion(lesson.ideas[0])
+    type(String(q.mistakes[0].value), q.answer.unit)
+    expect(await panel.findByText('Summary 2.')).toBeTruthy()
+    expect(buddy.summaryPrompts).toHaveLength(2)
+    expect(buddy.summaryPrompts[1]).not.toBe(buddy.summaryPrompts[0])
   })
 })

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { withTimeout } from '../ai/buddy'
 import { buildSummary, TUTOR_TIMEOUT_MS, TutorSession, tutorTools, type TutorOutcome, type TutorRecord, type TutorView } from '../ai/tutorAgent'
 import { brainRow, type BrainStatus, type BuddyService } from '../ai/useBuddy'
+import { useTuning } from '../config/tuning'
 import type { Idea } from '../content/lessonSchema'
 import { Diagram } from '../diagrams/Diagram'
 import type { GradeResult, MistakeCode, Question, Unit } from '../maths/types'
@@ -11,6 +12,7 @@ import { feedbackFor } from './feedback'
 import type { TutorSessionRecord } from './progress'
 import { Steps } from './Steps'
 import { bigBtn, card } from './styles'
+import { ReadAloud } from '../ui/ReadAloud'
 
 export interface TutorHooks {
   service: BuddyService
@@ -37,6 +39,7 @@ interface Props {
 type CardState = { kind: 'off' } | { kind: 'failed' } | { kind: 'on'; session: TutorSession; view: TutorView }
 
 export function TutorCard(props: Props) {
+  const tuning = useTuning()
   const latest = useRef(props)
   latest.current = props
   const [state, setState] = useState<CardState>({ kind: 'off' })
@@ -44,6 +47,7 @@ export function TutorCard(props: Props) {
 
   useEffect(() => {
     const { hooks, brain, idea, checkQuestion, misses, hasPrevious } = latest.current
+    const maxTurns = tuning.max_turns
     let live = true
     let session: TutorSession | null = null
     const startedAt = Date.now()
@@ -73,7 +77,7 @@ export function TutorCard(props: Props) {
         const model = await withTimeout(hooks.service.tutorModel(tutorTools(idea)), TUTOR_TIMEOUT_MS)
         if (!live) return
         if (deviceOnly(hooks.service.status())) return fail()
-        const summary = buildSummary({ idea, misses, mistakeCodes: hooks.mistakeCodes, history: hooks.history })
+        const summary = buildSummary({ idea, misses, mistakeCodes: hooks.mistakeCodes, history: hooks.history, maxTurns })
         const created: TutorSession = new TutorSession({
           model,
           idea,
@@ -149,9 +153,10 @@ export function TutorCard(props: Props) {
         switch (item.kind) {
           case 'say':
             return (
-              <p key={i} className="rounded-xl bg-purple-soft px-4 py-3 text-lg font-bold">
-                {item.text}
-              </p>
+              <div key={i} className="flex flex-wrap items-center gap-3 rounded-xl bg-purple-soft px-4 py-3 text-lg font-bold">
+                <p>{item.text}</p>
+                <ReadAloud label="Read the tutor's message aloud" parts={[item.text]} />
+              </div>
             )
           case 'practice':
             return (

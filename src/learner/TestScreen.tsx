@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Diagram } from '../diagrams/Diagram'
+import { ReadAloud } from '../ui/ReadAloud'
 import { AnswerBox } from './AnswerBox'
 import { bigBtn, card, softBtn } from './styles'
 import { nextUnanswered, remainingMs, testQuestion, type TestAnswer, type TestRecord } from './test'
@@ -77,7 +78,10 @@ export function TestScreen({ test, now, onAnswer, onFinish }: Props) {
       </div>
 
       <section className={`${card} space-y-4`}>
-        <p className="text-lg font-bold">{question.prompt}</p>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <p className="text-lg font-bold">{question.prompt}</p>
+          <ReadAloud key={shown} label="Read the question aloud" parts={[question.prompt]} />
+        </div>
         <div className="mx-auto max-w-sm text-ink">
           <Diagram spec={question.diagram} />
         </div>

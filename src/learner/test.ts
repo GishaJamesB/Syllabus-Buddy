@@ -169,16 +169,21 @@ export function buildTest(lesson: Lesson, progress: Progress, random: () => numb
   return shuffle(questions, random)
 }
 
-export function timeLimitFor(questions: TestQuestionRef[]): number {
-  return questions.reduce((sum, q) => sum + testTimer[q.difficulty], 0)
+export function timeLimitFor(questions: TestQuestionRef[], seconds: Record<LessonDifficulty, number> = testTimer): number {
+  return questions.reduce((sum, q) => sum + seconds[q.difficulty], 0)
 }
 
-export function newTest(questions: TestQuestionRef[], now: number, random: () => number = Math.random): TestRecord {
+export function newTest(
+  questions: TestQuestionRef[],
+  now: number,
+  random: () => number = Math.random,
+  seconds: Record<LessonDifficulty, number> = testTimer,
+): TestRecord {
   return {
     id: `test-${now}-${Math.floor(random() * 1e9).toString(36)}`,
     startedAt: now,
     finishedAt: null,
-    timeLimitS: timeLimitFor(questions),
+    timeLimitS: timeLimitFor(questions, seconds),
     questions,
     answers: questions.map(() => null),
     results: questions.map(() => null),
