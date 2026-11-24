@@ -1,5 +1,6 @@
 import type { Idea, Lesson, LessonDifficulty } from '../content/lessonSchema'
 import { generate } from '../maths/registry'
+import type { Intent } from '../ai/turnSchema'
 import type { GradeResult, MistakeCode, Question, Unit } from '../maths/types'
 
 export const SCHEMA_VERSION = 1
@@ -19,6 +20,20 @@ export interface Attempt {
   at: number
 }
 
+export interface BuddyTurn {
+  ideaId: string
+  templateId: string
+  seed: number
+  kind: 'miss' | 'ask'
+  reason: GradeResult['reason'] | null
+  code: MistakeCode | null
+  intent: Intent | null
+  misconception: MistakeCode | null
+  source: 'on_device' | 'in_cloud' | null
+  outcome: 'ok' | 'guarded' | 'failed'
+  at: number
+}
+
 export interface IdeaState {
   questionSeed: number
   stepsShown: boolean
@@ -30,6 +45,7 @@ export interface Progress {
   passedIdeaIds: string[]
   ideas: Record<string, IdeaState>
   attempts: Attempt[]
+  buddyTurns: BuddyTurn[]
   tests: unknown[]
   updatedAt: number
 }
@@ -69,9 +85,14 @@ export function newProgress(lesson: Lesson, now: number): Progress {
     passedIdeaIds: [],
     ideas: {},
     attempts: [],
+    buddyTurns: [],
     tests: [],
     updatedAt: now,
   }
+}
+
+export function withDefaults(progress: Progress): Progress {
+  return progress.buddyTurns ? progress : { ...progress, buddyTurns: [] }
 }
 
 export function newProfile(nickname: string, id: string, lesson: Lesson, now: number): Profile {
@@ -169,6 +190,10 @@ export function recordAttempt(
   })
 }
 
+export function recordBuddyTurn(progress: Progress, turn: Omit<BuddyTurn, 'at'>, now: number): Progress {
+  return touch(progress, now, { buddyTurns: [...(progress.buddyTurns ?? []), { ...turn, at: now }] })
+}
+
 export function showSteps(progress: Progress, idea: Idea, now: number): Progress {
   return touch(progress, now, { ideas: { ...progress.ideas, [idea.id]: { ...ideaState(progress, idea), stepsShown: true } } })
 }
@@ -208,6 +233,9 @@ export function mistakeHistory(profile: Profile): Partial<Record<MistakeCode, nu
   const counts: Partial<Record<MistakeCode, number>> = {}
   for (const a of profile.progress.attempts) {
     if (!a.correct && a.code) counts[a.code] = (counts[a.code] ?? 0) + 1
+  }
+  for (const t of profile.progress.buddyTurns ?? []) {
+    if (t.kind === 'ask' && t.misconception) counts[t.misconception] = (counts[t.misconception] ?? 0) + 1
   }
   return counts
 }

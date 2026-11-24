@@ -18,10 +18,13 @@ import {
   nextQuestion,
   passingAttempt,
   recordAttempt,
+  recordBuddyTurn,
   resumeTarget,
   showSteps,
   startAgain,
+  withDefaults,
   workedExample,
+  type BuddyTurn,
   type Progress,
 } from './progress'
 
@@ -153,5 +156,34 @@ describe('progress', () => {
     p = answer(p, 0, String(q.answer.value), null)
     const profile = { ...newProfile('Riya', 'riya', lesson, 0), progress: p }
     expect(mistakeHistory(profile)).toEqual({ perim_two_sides_only: 2, units_missing: 1 })
+  })
+})
+
+describe('buddy turns', () => {
+  const turn = (kind: BuddyTurn['kind'], misconception: BuddyTurn['misconception']): Omit<BuddyTurn, 'at'> => ({
+    ideaId: idea1.id,
+    templateId: idea1.checkQuestion.templateId,
+    seed: 1,
+    kind,
+    reason: null,
+    code: null,
+    intent: 'answer_attempt',
+    misconception,
+    source: 'on_device',
+    outcome: 'ok',
+  })
+
+  it('defaults buddyTurns to an empty list for older saves', () => {
+    const { buddyTurns: _, ...old } = newProgress(lesson, 0)
+    expect(withDefaults(old as Progress).buddyTurns).toEqual([])
+  })
+
+  it('appends turns and counts only ask misconceptions in the mistake history', () => {
+    let p = newProgress(lesson, 0)
+    p = recordBuddyTurn(p, turn('miss', 'perim_two_sides_only'), 5)
+    p = recordBuddyTurn(p, turn('ask', 'perim_area_confused'), 6)
+    expect(p.buddyTurns.map((t) => t.at)).toEqual([5, 6])
+    expect(p.updatedAt).toBe(6)
+    expect(mistakeHistory({ ...newProfile('Riya', 'riya', lesson, 0), progress: p })).toEqual({ perim_area_confused: 1 })
   })
 })

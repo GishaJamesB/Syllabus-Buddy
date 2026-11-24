@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import type { BrainStatus, BuddyView } from '../ai/useBuddy'
 import type { Idea } from '../content/lessonSchema'
 import { Diagram } from '../diagrams/Diagram'
 import { grade } from '../maths/grade'
-import type { GradeResult, Unit } from '../maths/types'
+import type { GradeResult, Question, Unit } from '../maths/types'
 import { Confetti } from '../ui/Confetti'
 import { AnswerBox } from './AnswerBox'
+import { BuddyPanel } from './BuddyPanel'
 import { feedbackFor, type Feedback } from './feedback'
 import {
   checkQuestion,
@@ -23,11 +25,15 @@ interface Props {
   index: number
   total: number
   progress: Progress
-  onAnswer: (input: { text: string; unit: Unit | null }, result: GradeResult) => void
+  onAnswer: (input: { text: string; unit: Unit | null }, result: GradeResult, question: Question) => void
   onShowSteps: () => void
   onNewQuestion: () => void
   onBack: () => void
   onNext: () => void
+  buddyView: BuddyView | null
+  brain: BrainStatus
+  previousTitle: string | null
+  onAsk: (text: string, question: Question) => void
 }
 
 const TONE_CLASS: Record<Feedback['tone'], string> = {
@@ -46,7 +52,21 @@ function Steps({ steps }: { steps: string[] }) {
   )
 }
 
-export function IdeaScreen({ idea, index, total, progress, onAnswer, onShowSteps, onNewQuestion, onBack, onNext }: Props) {
+export function IdeaScreen({
+  idea,
+  index,
+  total,
+  progress,
+  onAnswer,
+  onShowSteps,
+  onNewQuestion,
+  onBack,
+  onNext,
+  buddyView,
+  brain,
+  previousTitle,
+  onAsk,
+}: Props) {
   const heading = useRef<HTMLHeadingElement>(null)
   const nextButton = useRef<HTMLButtonElement>(null)
   const justPassed = useRef(false)
@@ -61,6 +81,8 @@ export function IdeaScreen({ idea, index, total, progress, onAnswer, onShowSteps
   const misses = missCount(progress, idea)
   const isLast = index === total - 1
   const shownFeedback = feedback?.seed === questionSeed ? feedback.value : null
+  const shownBuddy =
+    buddyView?.context.ideaId === idea.id && buddyView.context.seed === questionSeed ? buddyView : null
 
   useEffect(() => {
     heading.current?.focus()
@@ -80,7 +102,7 @@ export function IdeaScreen({ idea, index, total, progress, onAnswer, onShowSteps
       justPassed.current = true
       setCelebrate((c) => c + 1)
     }
-    onAnswer(input, result)
+    onAnswer(input, result, question)
   }
 
   return (
@@ -170,6 +192,15 @@ export function IdeaScreen({ idea, index, total, progress, onAnswer, onShowSteps
             </div>
           )}
         </div>
+
+        <BuddyPanel
+          view={shownBuddy}
+          brain={brain}
+          ideaTitle={idea.title}
+          previousTitle={previousTitle}
+          onGoBack={onBack}
+          onAsk={(text) => onAsk(text, question)}
+        />
 
         {!passed && !stepsShown && misses >= MISSES_BEFORE_HELP && (
           <button type="button" className={softBtn} onClick={onShowSteps}>

@@ -1,4 +1,6 @@
 import { useState, type FormEvent } from 'react'
+import type { BuddyService } from '../ai/useBuddy'
+import { BrainStatus } from './BrainStatus'
 import { checkNickname, type Profile } from './progress'
 import { bigBtn, card, field } from './styles'
 
@@ -6,9 +8,10 @@ interface Props {
   profiles: Profile[]
   onPick: (profile: Profile) => void
   onAdd: (nickname: string, id: string) => Promise<string | null>
+  buddy: BuddyService
 }
 
-export function NicknameScreen({ profiles, onPick, onAdd }: Props) {
+export function NicknameScreen({ profiles, onPick, onAdd, buddy }: Props) {
   const [name, setName] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -82,6 +85,8 @@ export function NicknameScreen({ profiles, onPick, onAdd }: Props) {
           Start learning
         </button>
       </form>
+
+      <BrainStatus buddy={buddy} />
     </div>
   )
 }
