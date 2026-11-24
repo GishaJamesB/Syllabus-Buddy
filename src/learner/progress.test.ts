@@ -10,6 +10,8 @@ import {
   firstCheckSeed,
   freshSeed,
   goTo,
+  hasTutorSession,
+  ideaMistakeCodes,
   ideaState,
   missCount,
   mistakeHistory,
@@ -20,12 +22,14 @@ import {
   recordAttempt,
   recordBuddyTurn,
   resumeTarget,
+  saveTutorSession,
   showSteps,
   startAgain,
   withDefaults,
   workedExample,
   type BuddyTurn,
   type Progress,
+  type TutorSessionRecord,
 } from './progress'
 
 const lesson = lessonJson as Lesson
@@ -185,5 +189,55 @@ describe('buddy turns', () => {
     expect(p.buddyTurns.map((t) => t.at)).toEqual([5, 6])
     expect(p.updatedAt).toBe(6)
     expect(mistakeHistory({ ...newProfile('Riya', 'riya', lesson, 0), progress: p })).toEqual({ perim_area_confused: 1 })
+  })
+})
+
+describe('tutor progress', () => {
+  const session = (changes: Partial<TutorSessionRecord> = {}): TutorSessionRecord => ({
+    ideaId: idea1.id,
+    seed: 7,
+    startedAt: 10,
+    calls: [],
+    results: [],
+    outcome: 'failed',
+    ...changes,
+  })
+
+  it('lists the mistake codes of misses since the last pass, skipping misses without a code', () => {
+    const q = checkQuestion(idea1, firstCheckSeed(idea1))
+    const known = q.mistakes[0]
+    let p = newProgress(lesson, 0)
+    p = answer(p, 0, String(known.value), q.answer.unit)
+    p = answerRight(p, 0)
+    expect(ideaMistakeCodes(p, idea1)).toEqual([])
+    p = answer(p, 0, '999999', q.answer.unit)
+    p = answer(p, 0, String(known.value), q.answer.unit)
+    p = answer(p, 0, String(q.answer.value), null)
+    expect(ideaMistakeCodes(p, idea1)).toEqual([known.code, 'units_missing'])
+  })
+
+  it('replaces a session with the same idea and start time and appends a new one', () => {
+    let p = saveTutorSession(newProgress(lesson, 0), session(), 1)
+    p = saveTutorSession(p, session({ outcome: 'mastered' }), 2)
+    expect(p.tutorSessions.map((s) => s.outcome)).toEqual(['mastered'])
+    p = saveTutorSession(p, session({ startedAt: 20 }), 3)
+    expect(p.tutorSessions.map((s) => s.startedAt)).toEqual([10, 20])
+    expect(hasTutorSession(p, idea1.id, 7)).toBe(true)
+    expect(hasTutorSession(p, idea1.id, 8)).toBe(false)
+  })
+
+  it('defaults tutorSessions to an empty list for older saves', () => {
+    const { tutorSessions: _, ...old } = newProgress(lesson, 0)
+    expect(withDefaults(old as Progress).tutorSessions).toEqual([])
+  })
+
+  it('counts wrong tutor practice results in the mistake history', () => {
+    const results = [
+      { questionId: 'p1', templateId: 'perim_rectangle', correct: false, code: 'perim_two_sides_only' as const },
+      { questionId: 'p2', templateId: 'perim_rectangle', correct: false, code: null },
+      { questionId: 'p3', templateId: 'perim_rectangle', correct: true, code: null },
+    ]
+    const p = saveTutorSession(newProgress(lesson, 0), session({ results }), 1)
+    expect(mistakeHistory({ ...newProfile('Riya', 'riya', lesson, 0), progress: p })).toEqual({ perim_two_sides_only: 1 })
   })
 })

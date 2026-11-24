@@ -8,8 +8,11 @@ import { Confetti } from '../ui/Confetti'
 import { AnswerBox } from './AnswerBox'
 import { BuddyPanel } from './BuddyPanel'
 import { feedbackFor, type Feedback } from './feedback'
+import { Steps } from './Steps'
+import { TutorCard, type TutorHooks } from './TutorCard'
 import {
   checkQuestion,
+  hasTutorSession,
   ideaState,
   isPassed,
   missCount,
@@ -34,22 +37,13 @@ interface Props {
   brain: BrainStatus
   previousTitle: string | null
   onAsk: (text: string, question: Question) => void
+  tutor?: TutorHooks
 }
 
 const TONE_CLASS: Record<Feedback['tone'], string> = {
   correct: 'bg-teal-soft text-teal',
   miss: 'bg-danger-soft text-danger',
   retry: 'bg-warn-soft text-ink',
-}
-
-function Steps({ steps }: { steps: string[] }) {
-  return (
-    <ol className="list-decimal space-y-1 pl-6 text-lg">
-      {steps.map((s, i) => (
-        <li key={i}>{s}</li>
-      ))}
-    </ol>
-  )
 }
 
 export function IdeaScreen({
@@ -66,12 +60,14 @@ export function IdeaScreen({
   brain,
   previousTitle,
   onAsk,
+  tutor,
 }: Props) {
   const heading = useRef<HTMLHeadingElement>(null)
   const nextButton = useRef<HTMLButtonElement>(null)
   const justPassed = useRef(false)
   const [feedback, setFeedback] = useState<{ seed: number; value: Feedback } | null>(null)
   const [celebrate, setCelebrate] = useState(0)
+  const [tutorRun, setTutorRun] = useState<{ seed: number; failed: boolean } | null>(null)
 
   const worked = useMemo(() => workedExample(idea), [idea])
   const { questionSeed, stepsShown } = ideaState(progress, idea)
@@ -81,6 +77,8 @@ export function IdeaScreen({
   const misses = missCount(progress, idea)
   const isLast = index === total - 1
   const shownFeedback = feedback?.seed === questionSeed ? feedback.value : null
+  const tutorOn = tutor !== undefined && tutorRun?.seed === questionSeed
+  const tutorActive = tutorOn && !tutorRun.failed
   const shownBuddy =
     buddyView?.context.ideaId === idea.id && buddyView.context.seed === questionSeed ? buddyView : null
 
@@ -102,7 +100,20 @@ export function IdeaScreen({
       justPassed.current = true
       setCelebrate((c) => c + 1)
     }
+    const counted = !result.correct && result.reason !== 'not_a_number'
+    if (tutor && counted && misses + 1 === MISSES_BEFORE_HELP && tutorRun?.seed !== questionSeed) {
+      setTutorRun({ seed: questionSeed, failed: false })
+    }
     onAnswer(input, result, question)
+  }
+
+  const tutorHooks: TutorHooks | undefined = tutor && {
+    ...tutor,
+    onMastered: (q, input, result) => {
+      justPassed.current = true
+      setCelebrate((c) => c + 1)
+      tutor.onMastered(q, input, result)
+    },
   }
 
   return (
@@ -166,7 +177,7 @@ export function IdeaScreen({
           </div>
         )}
 
-        {stepsShown && !passed ? (
+        {tutorActive ? null : stepsShown && !passed ? (
           <div className="space-y-4">
             <p className="text-lg font-extrabold">Here is how to solve it:</p>
             <Steps steps={question.steps} />
@@ -202,7 +213,30 @@ export function IdeaScreen({
           onAsk={(text) => onAsk(text, question)}
         />
 
-        {!passed && !stepsShown && misses >= MISSES_BEFORE_HELP && (
+        {tutorOn && tutorHooks && (
+          <TutorCard
+            key={questionSeed}
+            hooks={tutorHooks}
+            brain={brain}
+            idea={idea}
+            checkQuestion={question}
+            misses={misses}
+            passed={passed}
+            hasPrevious={index > 0}
+            onBack={onBack}
+            onNext={onNext}
+            onNewQuestion={onNewQuestion}
+            onEnd={(outcome) => outcome === 'failed' && setTutorRun({ seed: questionSeed, failed: true })}
+          />
+        )}
+
+        {tutor && !tutorOn && !passed && !stepsShown && misses >= MISSES_BEFORE_HELP && !hasTutorSession(progress, idea.id, questionSeed) && (
+          <button type="button" className={softBtn} onClick={() => setTutorRun({ seed: questionSeed, failed: false })}>
+            Ask the Tutor
+          </button>
+        )}
+
+        {!passed && !stepsShown && !tutorActive && misses >= MISSES_BEFORE_HELP && (
           <button type="button" className={softBtn} onClick={onShowSteps}>
             Show me how
           </button>

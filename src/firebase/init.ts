@@ -1,7 +1,15 @@
 import { initializeApp, type FirebaseApp } from 'firebase/app'
 import { getToken, initializeAppCheck, ReCaptchaEnterpriseProvider } from 'firebase/app-check'
 import { getAuth, signInAnonymously } from 'firebase/auth'
-import { getAI, getGenerativeModel, GoogleAIBackend, InferenceMode, ThinkingLevel } from 'firebase/ai'
+import {
+  FunctionCallingMode,
+  getAI,
+  getGenerativeModel,
+  GoogleAIBackend,
+  InferenceMode,
+  ThinkingLevel,
+  type FunctionDeclaration,
+} from 'firebase/ai'
 import type { AppConfig, InferenceModeValue } from './config'
 import { turnJsonSchema } from '../ai/turnSchema'
 
@@ -19,6 +27,7 @@ export interface FirebaseServices {
   uid: string
   createTurnModel: () => ReturnType<typeof getGenerativeModel>
   createAuthorModel: (model: string, timeoutMs: number, responseJsonSchema: Record<string, unknown>) => ReturnType<typeof getGenerativeModel>
+  createTutorModel: (model: string, tools: FunctionDeclaration[]) => ReturnType<typeof getGenerativeModel>
 }
 
 export async function initFirebase(config: AppConfig): Promise<FirebaseServices> {
@@ -74,5 +83,20 @@ export async function initFirebase(config: AppConfig): Promise<FirebaseServices>
       { timeout: timeoutMs },
     )
 
-  return { app, uid: cred.user.uid, createTurnModel, createAuthorModel }
+  const createTutorModel = (model: string, tools: FunctionDeclaration[]) =>
+    getGenerativeModel(
+      ai,
+      {
+        mode: InferenceMode.ONLY_IN_CLOUD,
+        inCloudParams: {
+          model,
+          tools: [{ functionDeclarations: tools }],
+          toolConfig: { functionCallingConfig: { mode: FunctionCallingMode.AUTO } },
+          generationConfig: { thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
+        },
+      },
+      { timeout: CLOUD_TIMEOUT_MS },
+    )
+
+  return { app, uid: cred.user.uid, createTurnModel, createAuthorModel, createTutorModel }
 }

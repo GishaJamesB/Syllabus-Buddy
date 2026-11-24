@@ -144,7 +144,7 @@ export function isSafeClue(clue: string | null, answerValue: number): clue is st
   return !digits.test(clue) && !inWords
 }
 
-function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+export function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error('Buddy timed out')), ms)
     promise.then(

@@ -18,13 +18,17 @@ import { IdeaScreen } from './IdeaScreen'
 import { NicknameScreen } from './NicknameScreen'
 import {
   goTo,
+  ideaMistakeCodes,
   ideaState,
+  mistakeHistory,
   newProfile,
   newProgress,
   nextQuestion,
   recordAttempt,
   recordBuddyTurn,
+  recordPracticePass,
   resumeTarget,
+  saveTutorSession,
   SCHEMA_VERSION,
   showSteps,
   startAgain,
@@ -102,6 +106,10 @@ export default function LearnerApp({ lessonData = lessonJson, open = defaultOpen
     const next = { ...prev, progress: change(prev.progress, Date.now()) }
     show(next)
     store.saveProfile(next).catch(() => setSaveFailed(true))
+  }
+
+  function updateFor(profileId: string, change: (progress: Progress, now: number) => Progress) {
+    if (current.current?.id === profileId) update(change)
   }
 
   useEffect(() => {
@@ -232,6 +240,14 @@ export default function LearnerApp({ lessonData = lessonJson, open = defaultOpen
           brain={brain}
           previousTitle={index > 0 ? lesson.ideas[index - 1].title : null}
           onAsk={(text, question) => void turns.send(contextFor(), { kind: 'ask', turn: { idea, question, text } })}
+          tutor={{
+            service: buddy,
+            history: mistakeHistory(profile),
+            mistakeCodes: ideaMistakeCodes(profile.progress, idea),
+            onMastered: (question, input, result) =>
+              updateFor(learnerId, (p, now) => recordPracticePass(p, idea, question, input, result, now)),
+            onRecord: (session) => updateFor(learnerId, (p, now) => saveTutorSession(p, session, now)),
+          }}
         />
       )
     }

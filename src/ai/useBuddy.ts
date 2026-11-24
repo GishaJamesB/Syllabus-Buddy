@@ -2,6 +2,8 @@ import { useCallback, useRef, useState, useSyncExternalStore } from 'react'
 import type { InferenceModeValue } from '../firebase/config'
 import { askTurn, missTurn, type AskTurn, type BuddyReply, type MissTurn, type TurnModel } from './buddy'
 import { getOnDeviceStatus, type OnDeviceStatus } from './onDeviceStatus'
+import type { FunctionDeclaration } from 'firebase/ai'
+import type { TutorModel } from './tutorAgent'
 
 export type DeviceTurnModel = TurnModel & {
   initializeDeviceModel?(onProgress?: (progress: number) => void): Promise<void>
@@ -10,6 +12,7 @@ export type DeviceTurnModel = TurnModel & {
 export interface BuddyBackend {
   mode: InferenceModeValue
   createTurnModel(): DeviceTurnModel
+  createTutorModel?(tools: FunctionDeclaration[]): TutorModel
   onDeviceStatus(): Promise<OnDeviceStatus>
 }
 
@@ -23,6 +26,7 @@ export interface BuddyService {
   status(): BrainStatus
   subscribe(listener: () => void): () => void
   model(): Promise<TurnModel>
+  tutorModel(tools: FunctionDeclaration[]): Promise<TutorModel>
   downloadDeviceModel(): Promise<void>
 }
 
@@ -66,6 +70,11 @@ export function createBuddyService(load: () => Promise<BuddyBackend>): BuddyServ
     async model() {
       return (await start()).createTurnModel()
     },
+    async tutorModel(tools) {
+      const b = await start()
+      if (!b.createTutorModel) throw new Error('The tutor model is not available')
+      return b.createTutorModel(tools)
+    },
     async downloadDeviceModel() {
       const b = await start()
       const model = b.createTurnModel()
@@ -97,6 +106,7 @@ async function loadFirebaseBackend(): Promise<BuddyBackend> {
     return {
       mode: result.config.inferenceMode,
       createTurnModel: () => services.createTurnModel(),
+      createTutorModel: (tools) => services.createTutorModel(result.config.tutorModel, tools),
       onDeviceStatus: getOnDeviceStatus,
     }
   } catch (e) {

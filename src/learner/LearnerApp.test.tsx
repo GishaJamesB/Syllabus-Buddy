@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import 'fake-indexeddb/auto'
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { InferenceSource } from '../ai/buddy'
 import type { OnDeviceStatus } from '../ai/onDeviceStatus'
@@ -8,9 +8,11 @@ import { createBuddyService, type BuddyService } from '../ai/useBuddy'
 import lessonJson from '../content/ch6.lesson.json'
 import type { InferenceModeValue } from '../firebase/config'
 import type { Idea, Lesson } from '../content/lessonSchema'
-import type { Question } from '../maths/types'
+import { generate } from '../maths/registry'
+import { formatAnswer, type Question } from '../maths/types'
 import LearnerApp from './LearnerApp'
-import { checkQuestion, firstCheckSeed, freshSeed, mistakeHistory, MISSES_BEFORE_HELP } from './progress'
+import { checkQuestion, firstCheckSeed, freshSeed, mistakeHistory, MISSES_BEFORE_HELP, newProfile, recordAttempt } from './progress'
+import { grade } from '../maths/grade'
 import { memoryStore, openStore, type Store } from './store'
 
 const lesson = lessonJson as Lesson
@@ -457,9 +459,10 @@ describe('Buddy', () => {
     expect(screen.getByText('New clue.')).toBeTruthy()
 
     type('3', null)
+    await screen.findByText("The tutor can't help right now")
     const q = firstQuestion(lesson.ideas[0])
     expect(q.answer.unit).toBe('cm')
-    type(String(q.answer.value), null)
+    type(String(q.answer.value), 'cm')
     fireEvent.click(nextButton())
     await screen.findByText('Idea 2 of 7')
     await buddy.reply({ text: json('answer_attempt', null, 'Late clue.'), source: 'on_device' }, 2)
@@ -531,7 +534,7 @@ describe('Buddy', () => {
     type('2', null)
     await buddy.reply({ text: json('answer_attempt', null, 'Second clue.'), source: 'on_device' })
     type('3', null)
-    fireEvent.click(screen.getByRole('button', { name: 'Show me how' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Show me how' }))
     fireEvent.click(screen.getByRole('button', { name: 'Try a new question' }))
     await buddy.reply({ text: json('answer_attempt', null, 'Old question clue.'), source: 'on_device' })
     expect(screen.queryByText('Second clue.')).toBeNull()
@@ -591,5 +594,244 @@ describe('Buddy', () => {
       await startWith(fakeBuddy(options))
       expect(screen.getByText(label)).toBeTruthy()
     }
+  })
+})
+
+type TutorStep = { calls?: { name: string; args?: Record<string, unknown> }[]; text?: string } | Error | 'hang'
+
+function tutorBuddy(script: TutorStep[], mode: InferenceModeValue = 'prefer_on_device') {
+  const requests: unknown[] = []
+  const system: string[] = []
+  const service = createBuddyService(async () => ({
+    mode,
+    onDeviceStatus: async () => 'available' as const,
+    createTurnModel: () => ({ generateContent: () => Promise.reject(new Error('offline')) }),
+    createTutorModel: () => ({
+      startChat({ systemInstruction }: { systemInstruction: string }) {
+        system.push(systemInstruction)
+        return {
+          async sendMessage(request: unknown) {
+            requests.push(structuredClone(request))
+            const step = script.shift() ?? {}
+            if (step === 'hang') return new Promise<never>(() => {})
+            if (step instanceof Error) throw step
+            return {
+              response: {
+                text: () => step.text ?? '',
+                functionCalls: () => step.calls?.map((c) => ({ name: c.name, args: c.args ?? {} })),
+              },
+            }
+          },
+          getHistory: async () => [],
+        }
+      },
+    }),
+  }))
+  return { service, requests, system }
+}
+
+async function escalate(tutor: { service: BuddyService }, nickname = 'Zanzibar') {
+  const open = dbOpener()
+  await start(open, lessonJson, tutor.service)
+  await act(async () => {})
+  await addNickname(nickname)
+  await screen.findByText('Idea 1 of 7')
+  for (let i = 0; i < MISSES_BEFORE_HELP; i++) type('999999', 'cm')
+  return open
+}
+
+const panelItems = () =>
+  within(screen.getByRole('list', { name: 'What the AI did' }))
+    .getAllByRole('listitem')
+    .map((li) => li.textContent)
+
+describe('Tutor', () => {
+  afterEach(() => vi.restoreAllMocks())
+
+  it('opens after three misses, runs the scripted tools, and a correct practice answer passes the idea', async () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.5)
+    const practice = generate('perim_rectangle', 'medium', 500_000_000)
+    const check = firstQuestion(lesson.ideas[0])
+    expect(practice.answer.value).not.toBe(check.answer.value)
+    const tutor = tutorBuddy([
+      { calls: [{ name: 'getMistakeHistory' }] },
+      {
+        calls: [
+          { name: 'makePractice', args: { templateId: 'perim_rectangle', difficulty: 'medium' } },
+          { name: 'showDiagram', args: { questionId: 'p1' } },
+        ],
+        text: 'Try this one, add every side.',
+      },
+    ])
+    const open = dbOpener()
+    await start(open, lessonJson, tutor.service)
+    await act(async () => {})
+    await addNickname('Zanzibar')
+    await screen.findByText('Idea 1 of 7')
+    askBuddy('my secret sentence')
+    await act(async () => {})
+    for (let i = 0; i < MISSES_BEFORE_HELP; i++) type('999999', 'cm')
+
+    expect(screen.getByText('☁️ Tutor')).toBeTruthy()
+    await screen.findByText(practice.prompt)
+    expect(screen.getByText('Sent to the cloud')).toBeTruthy()
+    expect(screen.getByText('Try this one, add every side.')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Show me how' })).toBeNull()
+    expect(screen.getAllByLabelText(/^Your answer/)).toHaveLength(1)
+
+    type(String(practice.answer.value), practice.answer.unit)
+    await screen.findByText("You've got it!")
+    expect((nextButton() as HTMLButtonElement).disabled).toBe(false)
+    expect(panelItems().slice(1, 4).map((t) => t?.split('(')[0])).toEqual([
+      'Looked at past mistakesgetMistakeHistory',
+      'Made a practice questionmakePractice',
+      'Drew a diagramshowDiagram',
+    ])
+    expect(panelItems().at(-1)).toBe('Ended: the idea is mastered')
+
+    const profile = await saved(open)
+    expect(profile.progress.passedIdeaIds).toEqual(['idea-1'])
+    expect(profile.progress.attempts.at(-1)).toMatchObject({ correct: true, seed: practice.seed, templateId: 'perim_rectangle' })
+    expect(profile.progress.tutorSessions).toEqual([
+      {
+        ideaId: 'idea-1',
+        seed: check.seed,
+        startedAt: expect.any(Number),
+        calls: [
+          { name: 'getMistakeHistory', args: {}, by: 'model' },
+          { name: 'makePractice', args: { templateId: 'perim_rectangle', difficulty: 'medium' }, by: 'model' },
+          { name: 'showDiagram', args: { questionId: 'p1' }, by: 'model' },
+        ],
+        results: [{ questionId: 'p1', templateId: 'perim_rectangle', correct: true, code: null }],
+        outcome: 'mastered',
+      },
+    ])
+
+    const sent = JSON.stringify([tutor.system, tutor.requests])
+    expect(tutor.requests).toHaveLength(2)
+    for (const secret of ['Zanzibar', 'secret sentence', '999999', formatAnswer(check.answer), formatAnswer(practice.answer)]) {
+      expect(sent).not.toContain(secret)
+    }
+    expect(JSON.parse(tutor.requests[0] as string)).toEqual({
+      idea: { title: lesson.ideas[0].title, keyPoints: lesson.ideas[0].keyPoints },
+      templateId: 'perim_rectangle',
+      difficulty: 'medium',
+      misses: 3,
+      mistakeCodes: [],
+      history: {},
+      maxTurns: 5,
+    })
+  })
+
+  it('shows the worked steps and offers a new question when turns run out', async () => {
+    const tutor = tutorBuddy(Array.from({ length: 5 }, () => ({ calls: [{ name: 'getMistakeHistory' }] })))
+    const open = await escalate(tutor)
+    const check = firstQuestion(lesson.ideas[0])
+    await screen.findByText('Here is how to solve it:')
+    expect(screen.getByText(check.steps[check.steps.length - 1])).toBeTruthy()
+    expect(tutor.requests).toHaveLength(5)
+    fireEvent.click(screen.getByRole('button', { name: 'Try a new question' }))
+    expect(screen.queryByText('☁️ Tutor')).toBeNull()
+    expect(screen.queryByText(check.prompt)).toBeNull()
+    const sessions = (await saved(open)).progress.tutorSessions
+    expect(sessions.map((s) => s.outcome)).toEqual(['out_of_turns'])
+    expect(sessions[0].calls.at(-1)).toEqual({ name: 'giveWorkedSolution', args: { questionId: 'check' }, by: 'app' })
+  })
+
+  it('says the tutor is busy while it waits to retry', async () => {
+    const tutor = tutorBuddy([new Error('[503 ] This model is currently experiencing high demand.')])
+    await escalate(tutor)
+    expect(await screen.findByText('Tutor is busy, trying again…')).toBeTruthy()
+  })
+
+  it('falls back to "Show me how" when the tutor fails or Firebase is resting', async () => {
+    const tutor = tutorBuddy([new Error('[400 ] bad request')])
+    await escalate(tutor)
+    expect(await screen.findByText("The tutor can't help right now")).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Show me how' })).toBeTruthy()
+    cleanup()
+
+    await start(dbOpener())
+    await act(async () => {})
+    await addNickname('Riya')
+    await screen.findByText('Idea 1 of 7')
+    for (let i = 0; i < MISSES_BEFORE_HELP; i++) type('999999', 'cm')
+    expect(screen.getByText("The tutor can't help right now")).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Show me how' })).toBeTruthy()
+  })
+
+  it('keeps an unfinished session as failed when the learner switches', async () => {
+    const tutor = tutorBuddy(['hang'])
+    const open = await escalate(tutor)
+    await vi.waitFor(() => expect(tutor.requests).toHaveLength(1))
+    fireEvent.click(screen.getByRole('button', { name: 'Switch learner' }))
+    await screen.findByRole('button', { name: 'Zanzibar' })
+    const profile = (await (await open()).listProfiles())[0]
+    expect(profile.progress.tutorSessions).toEqual([
+      { ideaId: 'idea-1', seed: firstQuestion(lesson.ideas[0]).seed, startedAt: expect.any(Number), calls: [], results: [], outcome: 'failed' },
+    ])
+  })
+})
+
+describe('Tutor gates and navigation', () => {
+  it('never calls the cloud tutor in only_on_device mode and falls back to "Show me how"', async () => {
+    const tutor = tutorBuddy([{ calls: [{ name: 'getMistakeHistory' }] }], 'only_on_device')
+    await escalate(tutor)
+    expect(await screen.findByText("The tutor can't help right now")).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Show me how' })).toBeTruthy()
+    await act(async () => {})
+    expect(tutor.requests).toHaveLength(0)
+  })
+
+  it('offers "Ask the Tutor" after a reload with three misses and only starts when asked', async () => {
+    const open = dbOpener()
+    const idea = lesson.ideas[0]
+    const q = firstQuestion(idea)
+    let profile = newProfile('Riya', 'riya', lesson, 0)
+    for (let i = 0; i < MISSES_BEFORE_HELP; i++) {
+      const input = { text: '999999', unit: q.answer.unit }
+      profile = { ...profile, progress: recordAttempt(profile.progress, idea, input, grade(q, input), i) }
+    }
+    await (await open()).addProfile(profile)
+
+    const tutor = tutorBuddy(['hang'])
+    await start(open, lessonJson, tutor.service)
+    await act(async () => {})
+    fireEvent.click(screen.getByRole('button', { name: 'Riya' }))
+    await screen.findByText('Idea 1 of 7')
+    expect(screen.getByRole('button', { name: 'Show me how' })).toBeTruthy()
+    await act(async () => {})
+    expect(tutor.requests).toHaveLength(0)
+    expect(screen.queryByText('☁️ Tutor')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ask the Tutor' }))
+    expect(screen.getByText('☁️ Tutor')).toBeTruthy()
+    await vi.waitFor(() => expect(tutor.requests).toHaveLength(1))
+    expect(screen.queryByRole('button', { name: 'Ask the Tutor' })).toBeNull()
+  })
+
+  it('refuses navigate next before the idea is passed, and navigate back moves to the previous idea', async () => {
+    const tutor = tutorBuddy([
+      { calls: [{ name: 'navigate', args: { direction: 'next' } }] },
+      { calls: [{ name: 'navigate', args: { direction: 'back' } }] },
+    ])
+    const open = dbOpener()
+    await start(open, lessonJson, tutor.service)
+    await act(async () => {})
+    await learnIdea2()
+    for (let i = 0; i < MISSES_BEFORE_HELP; i++) type('999999', 'cm')
+    await screen.findByText('Idea 1 of 7')
+    expect(JSON.stringify(tutor.requests[1])).toContain('not passed')
+    const sessions = (await saved(open)).progress.tutorSessions
+    expect(sessions).toEqual([
+      expect.objectContaining({
+        ideaId: 'idea-2',
+        outcome: 'navigated',
+        calls: [
+          { name: 'navigate', args: { direction: 'next' }, by: 'model' },
+          { name: 'navigate', args: { direction: 'back' }, by: 'model' },
+        ],
+      }),
+    ])
   })
 })

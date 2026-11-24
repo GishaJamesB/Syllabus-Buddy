@@ -16,6 +16,7 @@ export const INFERENCE_MODES = [
 ] as const
 
 export const DEFAULT_CLOUD_MODEL = 'gemini-3.5-flash-lite'
+export const DEFAULT_TUTOR_MODEL = 'gemini-3.8-flash'
 
 export type InferenceModeValue = (typeof INFERENCE_MODES)[number]
 
@@ -31,6 +32,7 @@ export interface AppConfig {
   recaptchaKey: string
   inferenceMode: InferenceModeValue
   cloudModel: string
+  tutorModel: string
 }
 
 export type ConfigResult =
@@ -60,6 +62,7 @@ export function readConfig(env: Record<string, string | undefined>): ConfigResul
       recaptchaKey: env.VITE_RECAPTCHA_ENTERPRISE_KEY!.trim(),
       inferenceMode,
       cloudModel: env.VITE_CLOUD_MODEL?.trim() || DEFAULT_CLOUD_MODEL,
+      tutorModel: env.VITE_TUTOR_MODEL?.trim() || DEFAULT_TUTOR_MODEL,
     },
   }
 }

@@ -34,6 +34,15 @@ export interface BuddyTurn {
   at: number
 }
 
+export interface TutorSessionRecord {
+  ideaId: string
+  startedAt: number
+  seed: number
+  calls: { name: string; args: Record<string, unknown>; by: 'model' | 'app' }[]
+  results: { questionId: string; templateId: string; correct: boolean; code: MistakeCode | null }[]
+  outcome: 'mastered' | 'out_of_turns' | 'navigated' | 'failed'
+}
+
 export interface IdeaState {
   questionSeed: number
   stepsShown: boolean
@@ -46,6 +55,7 @@ export interface Progress {
   ideas: Record<string, IdeaState>
   attempts: Attempt[]
   buddyTurns: BuddyTurn[]
+  tutorSessions: TutorSessionRecord[]
   tests: unknown[]
   updatedAt: number
 }
@@ -86,13 +96,14 @@ export function newProgress(lesson: Lesson, now: number): Progress {
     ideas: {},
     attempts: [],
     buddyTurns: [],
+    tutorSessions: [],
     tests: [],
     updatedAt: now,
   }
 }
 
 export function withDefaults(progress: Progress): Progress {
-  return progress.buddyTurns ? progress : { ...progress, buddyTurns: [] }
+  return { ...progress, buddyTurns: progress.buddyTurns ?? [], tutorSessions: progress.tutorSessions ?? [] }
 }
 
 export function newProfile(nickname: string, id: string, lesson: Lesson, now: number): Profile {
@@ -190,6 +201,48 @@ export function recordAttempt(
   })
 }
 
+export function recordPracticePass(
+  progress: Progress,
+  idea: Idea,
+  question: Question,
+  input: { text: string; unit: Unit | null },
+  result: GradeResult,
+  now: number,
+): Progress {
+  const attempt: Attempt = {
+    ideaId: idea.id,
+    templateId: question.templateId,
+    difficulty: question.difficulty,
+    seed: question.seed,
+    answerText: input.text,
+    unit: input.unit,
+    correct: result.correct,
+    reason: result.reason ?? null,
+    code: result.code,
+    at: now,
+  }
+  const passedIdeaIds =
+    result.correct && !isPassed(progress, idea.id) ? [...progress.passedIdeaIds, idea.id] : progress.passedIdeaIds
+  return touch(progress, now, { attempts: [...progress.attempts, attempt], passedIdeaIds })
+}
+
+export function saveTutorSession(progress: Progress, session: TutorSessionRecord, now: number): Progress {
+  const sessions = progress.tutorSessions ?? []
+  const same = (s: TutorSessionRecord) => s.ideaId === session.ideaId && s.startedAt === session.startedAt
+  const tutorSessions = sessions.some(same) ? sessions.map((s) => (same(s) ? session : s)) : [...sessions, session]
+  return touch(progress, now, { tutorSessions })
+}
+
+export function hasTutorSession(progress: Progress, ideaId: string, seed: number): boolean {
+  return (progress.tutorSessions ?? []).some((s) => s.ideaId === ideaId && s.seed === seed)
+}
+
+export function ideaMistakeCodes(progress: Progress, idea: Idea): MistakeCode[] {
+  return attemptsSinceLastPass(progress, idea.id)
+    .filter((a) => !a.correct && a.code !== null)
+    .map((a) => a.code as MistakeCode)
+}
+
 export function recordBuddyTurn(progress: Progress, turn: Omit<BuddyTurn, 'at'>, now: number): Progress {
   return touch(progress, now, { buddyTurns: [...(progress.buddyTurns ?? []), { ...turn, at: now }] })
 }
@@ -236,6 +289,11 @@ export function mistakeHistory(profile: Profile): Partial<Record<MistakeCode, nu
   }
   for (const t of profile.progress.buddyTurns ?? []) {
     if (t.kind === 'ask' && t.misconception) counts[t.misconception] = (counts[t.misconception] ?? 0) + 1
+  }
+  for (const session of profile.progress.tutorSessions ?? []) {
+    for (const r of session.results ?? []) {
+      if (!r.correct && r.code) counts[r.code] = (counts[r.code] ?? 0) + 1
+    }
   }
   return counts
 }

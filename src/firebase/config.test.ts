@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_CLOUD_MODEL, readConfig, REQUIRED_KEYS } from './config'
+import { DEFAULT_CLOUD_MODEL, DEFAULT_TUTOR_MODEL, readConfig, REQUIRED_KEYS } from './config'
 
 const full = Object.fromEntries(REQUIRED_KEYS.map((k) => [k, 'x']))
 
@@ -24,6 +24,13 @@ describe('readConfig', () => {
     const b = readConfig({ ...full, VITE_CLOUD_MODEL: '  ' })
     expect(a.ok && a.config.cloudModel).toBe(DEFAULT_CLOUD_MODEL)
     expect(b.ok && b.config.cloudModel).toBe(DEFAULT_CLOUD_MODEL)
+  })
+
+  it('defaults tutorModel when missing or blank, and reads VITE_TUTOR_MODEL', () => {
+    const a = readConfig({ ...full, VITE_TUTOR_MODEL: ' ' })
+    const b = readConfig({ ...full, VITE_TUTOR_MODEL: 'my-model' })
+    expect(a.ok && a.config.tutorModel).toBe(DEFAULT_TUTOR_MODEL)
+    expect(b.ok && b.config.tutorModel).toBe('my-model')
   })
 
   it('trims values', () => {
