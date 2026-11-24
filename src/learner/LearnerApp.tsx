@@ -39,6 +39,23 @@ import {
 } from './progress'
 import { memoryStore, NicknameTakenError, openStore, type Store } from './store'
 import { smallBtn } from './styles'
+import {
+  answerTest,
+  buildTest,
+  finishDueTest,
+  finishedTests,
+  markTest,
+  newTest,
+  remainingMs,
+  saveTest,
+  timeLimitFor,
+  unfinishedTest,
+  type TestAnswer,
+  type TestQuestionRef,
+} from './test'
+import { TestResults } from './TestResults'
+import { TestScreen } from './TestScreen'
+import { TestStart } from './TestStart'
 
 export function loadLesson(data: unknown): Lesson | null {
   return validateLesson(data).ok ? (data as Lesson) : null
@@ -48,7 +65,14 @@ interface Props {
   lessonData?: unknown
   open?: () => Promise<Store>
   buddy?: BuddyService
+  now?: () => number
+  random?: () => number
 }
+
+type View =
+  | { kind: 'lesson' }
+  | { kind: 'test'; running: boolean; plan: TestQuestionRef[] | null }
+  | { kind: 'results'; testId: string }
 
 const defaultOpen = () => openStore()
 
@@ -69,12 +93,20 @@ function buddyTurnFor(context: TurnContext, request: BuddyRequest, reply: BuddyR
   }
 }
 
-export default function LearnerApp({ lessonData = lessonJson, open = defaultOpen, buddy = firebaseBuddy() }: Props) {
+export default function LearnerApp({
+  lessonData = lessonJson,
+  open = defaultOpen,
+  buddy = firebaseBuddy(),
+  now = Date.now,
+  random = Math.random,
+}: Props) {
   const lesson = useMemo(() => loadLesson(lessonData), [lessonData])
   const [store, setStore] = useState<Store | null>(null)
   const [saveFailed, setSaveFailed] = useState(false)
   const [profiles, setProfiles] = useState<Profile[] | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
+  const [view, setView] = useState<View>({ kind: 'lesson' })
+  const [tutorRunning, setTutorRunning] = useState(false)
   const current = useRef<Profile | null>(null)
   const brain = useBrainStatus(buddy)
   const turns = useBuddyTurns({
@@ -103,7 +135,7 @@ export default function LearnerApp({ lessonData = lessonJson, open = defaultOpen
   function update(change: (progress: Progress, now: number) => Progress) {
     const prev = current.current
     if (!prev || !store) return
-    const next = { ...prev, progress: change(prev.progress, Date.now()) }
+    const next = { ...prev, progress: change(prev.progress, now()) }
     show(next)
     store.saveProfile(next).catch(() => setSaveFailed(true))
   }
@@ -156,15 +188,20 @@ export default function LearnerApp({ lessonData = lessonJson, open = defaultOpen
   const activeStore = store
 
   function pick(p: Profile) {
-    show(
-      p.progress?.schemaVersion === SCHEMA_VERSION
-        ? { ...p, progress: withDefaults(p.progress) }
-        : { ...p, progress: newProgress(activeLesson, Date.now()) },
-    )
+    const loaded =
+      p.progress?.schemaVersion === SCHEMA_VERSION ? withDefaults(p.progress) : newProgress(activeLesson, now())
+    const before = unfinishedTest(loaded)
+    const progress = finishDueTest(loaded, now())
+    const picked = { ...p, progress }
+    show(picked)
+    if (progress !== loaded) activeStore.saveProfile(picked).catch(() => setSaveFailed(true))
+    if (unfinishedTest(progress)) setView({ kind: 'test', running: true, plan: null })
+    else if (before) setView({ kind: 'results', testId: before.id })
+    else setView({ kind: 'lesson' })
   }
 
   async function add(nickname: string, id: string): Promise<string | null> {
-    const p = newProfile(nickname, id, activeLesson, Date.now())
+    const p = newProfile(nickname, id, activeLesson, now())
     try {
       await activeStore.addProfile(p)
     } catch (e) {
@@ -175,12 +212,15 @@ export default function LearnerApp({ lessonData = lessonJson, open = defaultOpen
       setStore(fallback)
     }
     setProfiles((list) => [p, ...(list ?? [])])
+    setView({ kind: 'lesson' })
     show(p)
     return null
   }
 
   async function switchLearner() {
     turns.clear()
+    setView({ kind: 'lesson' })
+    setTutorRunning(false)
     show(null)
     try {
       setProfiles(await activeStore.listProfiles())
@@ -191,9 +231,70 @@ export default function LearnerApp({ lessonData = lessonJson, open = defaultOpen
 
   const banner = !store.persistent || saveFailed
 
+  function openTest() {
+    const p = current.current
+    if (!p) return
+    turns.clear()
+    const due = unfinishedTest(p.progress)
+    update((progress, at) => finishDueTest(progress, at))
+    const after = current.current?.progress ?? p.progress
+    if (due && !unfinishedTest(after)) return setView({ kind: 'results', testId: due.id })
+    setView({ kind: 'test', running: false, plan: due ? null : buildTest(activeLesson, after, random) })
+  }
+
+  function beginTest() {
+    const p = current.current
+    if (!p) return
+    if (!unfinishedTest(p.progress)) {
+      const questions = (view.kind === 'test' && view.plan) || buildTest(activeLesson, p.progress, random)
+      update((progress, at) => saveTest(progress, newTest(questions, at, random), at))
+    }
+    setView({ kind: 'test', running: true, plan: null })
+  }
+
+  function answerQuestion(index: number, input: TestAnswer | null) {
+    update((p, at) => {
+      const test = unfinishedTest(p)
+      return test ? saveTest(p, answerTest(test, index, input, at), at) : p
+    })
+  }
+
+  function finishTest() {
+    const test = current.current && unfinishedTest(current.current.progress)
+    if (!test) return
+    update((p, at) => saveTest(p, markTest(test, at), at))
+    setView({ kind: 'results', testId: test.id })
+  }
+
+  const openRecord = profile ? unfinishedTest(profile.progress) : null
+  const shownResults =
+    profile && view.kind === 'results' ? (profile.progress.tests.find((t) => t.id === view.testId) ?? null) : null
+
   let body
   if (!profile) {
     body = <NicknameScreen profiles={profiles} onPick={pick} onAdd={add} buddy={buddy} />
+  } else if (view.kind === 'test' && view.running && openRecord) {
+    body = <TestScreen key={openRecord.id} test={openRecord} now={now} onAnswer={answerQuestion} onFinish={finishTest} />
+  } else if (view.kind === 'test') {
+    body = (
+      <TestStart
+        history={finishedTests(profile.progress)}
+        timeLimitS={view.plan ? timeLimitFor(view.plan) : null}
+        remainingMs={openRecord ? remainingMs(openRecord, now()) : null}
+        onBegin={beginTest}
+      />
+    )
+  } else if (shownResults) {
+    body = (
+      <TestResults
+        key={shownResults.id}
+        test={shownResults}
+        lesson={lesson}
+        buddy={buddy}
+        onBuddyTurn={(turn) => update((p, at) => recordBuddyTurn(p, turn, at))}
+        onDone={() => setView({ kind: 'lesson' })}
+      />
+    )
   } else {
     const target = resumeTarget(lesson, profile.progress)
     if (target.kind === 'complete') {
@@ -201,7 +302,9 @@ export default function LearnerApp({ lessonData = lessonJson, open = defaultOpen
         <CompleteScreen
           nickname={profile.nickname}
           chapterTitle={lesson.title}
+          history={finishedTests(profile.progress)}
           onStartAgain={() => update((p, now) => startAgain(p, activeLesson, now))}
+          onTakeTest={openTest}
         />
       )
     } else {
@@ -236,6 +339,7 @@ export default function LearnerApp({ lessonData = lessonJson, open = defaultOpen
           onNewQuestion={() => update((p, now) => nextQuestion(p, idea, now))}
           onBack={() => index > 0 && moveTo(activeLesson.ideas[index - 1].id)}
           onNext={() => (isLast ? moveTo(null) : moveTo(activeLesson.ideas[index + 1].id))}
+          onTutorRunning={setTutorRunning}
           buddyView={turns.view}
           brain={brain}
           previousTitle={index > 0 ? lesson.ideas[index - 1].title : null}
@@ -257,6 +361,15 @@ export default function LearnerApp({ lessonData = lessonJson, open = defaultOpen
     <Shell
       learner={profile?.nickname ?? null}
       onSwitch={switchLearner}
+      testButton={
+        profile
+          ? {
+              label: view.kind !== 'lesson' ? 'Back to lesson' : openRecord ? 'Resume test' : 'Test',
+              onClick: view.kind === 'lesson' ? openTest : () => setView({ kind: 'lesson' }),
+              disabled: view.kind === 'lesson' && tutorRunning,
+            }
+          : undefined
+      }
       banner={banner}
       credit={lesson.source.credit}
     >
@@ -269,11 +382,12 @@ interface ShellProps {
   children: ReactNode
   learner?: string | null
   onSwitch?: () => void
+  testButton?: { label: string; onClick: () => void; disabled: boolean }
   banner?: boolean
   credit?: string
 }
 
-function Shell({ children, learner = null, onSwitch, banner = false, credit }: ShellProps) {
+function Shell({ children, learner = null, onSwitch, testButton, banner = false, credit }: ShellProps) {
   return (
     <div className="min-h-screen font-sans">
       <header className="bg-purple text-white shadow-card">
@@ -282,6 +396,11 @@ function Shell({ children, learner = null, onSwitch, banner = false, credit }: S
           {learner && onSwitch && (
             <div className="flex items-center gap-3">
               <span className="text-lg font-bold">Hi, {learner}!</span>
+              {testButton && (
+                <button type="button" className={smallBtn} onClick={testButton.onClick} disabled={testButton.disabled}>
+                  {testButton.label}
+                </button>
+              )}
               <button type="button" className={smallBtn} onClick={onSwitch}>
                 Switch learner
               </button>

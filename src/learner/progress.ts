@@ -2,6 +2,7 @@ import type { Idea, Lesson, LessonDifficulty } from '../content/lessonSchema'
 import { generate } from '../maths/registry'
 import type { Intent } from '../ai/turnSchema'
 import type { GradeResult, MistakeCode, Question, Unit } from '../maths/types'
+import type { TestRecord } from './test'
 
 export const SCHEMA_VERSION = 1
 export const MISSES_BEFORE_HELP = 3
@@ -56,7 +57,7 @@ export interface Progress {
   attempts: Attempt[]
   buddyTurns: BuddyTurn[]
   tutorSessions: TutorSessionRecord[]
-  tests: unknown[]
+  tests: TestRecord[]
   updatedAt: number
 }
 
@@ -103,7 +104,12 @@ export function newProgress(lesson: Lesson, now: number): Progress {
 }
 
 export function withDefaults(progress: Progress): Progress {
-  return { ...progress, buddyTurns: progress.buddyTurns ?? [], tutorSessions: progress.tutorSessions ?? [] }
+  return {
+    ...progress,
+    buddyTurns: progress.buddyTurns ?? [],
+    tutorSessions: progress.tutorSessions ?? [],
+    tests: progress.tests ?? [],
+  }
 }
 
 export function newProfile(nickname: string, id: string, lesson: Lesson, now: number): Profile {
@@ -293,6 +299,12 @@ export function mistakeHistory(profile: Profile): Partial<Record<MistakeCode, nu
   for (const session of profile.progress.tutorSessions ?? []) {
     for (const r of session.results ?? []) {
       if (!r.correct && r.code) counts[r.code] = (counts[r.code] ?? 0) + 1
+    }
+  }
+  for (const test of profile.progress.tests ?? []) {
+    if (test.finishedAt === null) continue
+    for (const r of test.results) {
+      if (r && !r.correct && r.code) counts[r.code] = (counts[r.code] ?? 0) + 1
     }
   }
   return counts

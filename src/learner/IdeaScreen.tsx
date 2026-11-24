@@ -38,6 +38,7 @@ interface Props {
   previousTitle: string | null
   onAsk: (text: string, question: Question) => void
   tutor?: TutorHooks
+  onTutorRunning?: (running: boolean) => void
 }
 
 const TONE_CLASS: Record<Feedback['tone'], string> = {
@@ -61,6 +62,7 @@ export function IdeaScreen({
   previousTitle,
   onAsk,
   tutor,
+  onTutorRunning,
 }: Props) {
   const heading = useRef<HTMLHeadingElement>(null)
   const nextButton = useRef<HTMLButtonElement>(null)
@@ -68,6 +70,7 @@ export function IdeaScreen({
   const [feedback, setFeedback] = useState<{ seed: number; value: Feedback } | null>(null)
   const [celebrate, setCelebrate] = useState(0)
   const [tutorRun, setTutorRun] = useState<{ seed: number; failed: boolean } | null>(null)
+  const [tutorEndedSeed, setTutorEndedSeed] = useState<number | null>(null)
 
   const worked = useMemo(() => workedExample(idea), [idea])
   const { questionSeed, stepsShown } = ideaState(progress, idea)
@@ -79,12 +82,19 @@ export function IdeaScreen({
   const shownFeedback = feedback?.seed === questionSeed ? feedback.value : null
   const tutorOn = tutor !== undefined && tutorRun?.seed === questionSeed
   const tutorActive = tutorOn && !tutorRun.failed
+  const tutorRunning = tutorOn && tutorEndedSeed !== questionSeed
   const shownBuddy =
     buddyView?.context.ideaId === idea.id && buddyView.context.seed === questionSeed ? buddyView : null
 
   useEffect(() => {
     heading.current?.focus()
   }, [idea.id])
+
+  useEffect(() => {
+    onTutorRunning?.(tutorRunning)
+  }, [onTutorRunning, tutorRunning])
+
+  useEffect(() => () => onTutorRunning?.(false), [onTutorRunning])
 
   useEffect(() => {
     if (passed && justPassed.current) {
@@ -226,7 +236,10 @@ export function IdeaScreen({
             onBack={onBack}
             onNext={onNext}
             onNewQuestion={onNewQuestion}
-            onEnd={(outcome) => outcome === 'failed' && setTutorRun({ seed: questionSeed, failed: true })}
+            onEnd={(outcome) => {
+              setTutorEndedSeed(questionSeed)
+              if (outcome === 'failed') setTutorRun({ seed: questionSeed, failed: true })
+            }}
           />
         )}
 

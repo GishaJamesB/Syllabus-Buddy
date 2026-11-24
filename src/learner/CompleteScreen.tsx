@@ -1,14 +1,18 @@
 import { useEffect, useRef } from 'react'
 import { Confetti } from '../ui/Confetti'
-import { bigBtn, card } from './styles'
+import { bigBtn, card, softBtn } from './styles'
+import { TestHistory } from './TestHistory'
+import type { TestRecord } from './test'
 
 interface Props {
   nickname: string
   chapterTitle: string
+  history: TestRecord[]
   onStartAgain: () => void
+  onTakeTest: () => void
 }
 
-export function CompleteScreen({ nickname, chapterTitle, onStartAgain }: Props) {
+export function CompleteScreen({ nickname, chapterTitle, history, onStartAgain, onTakeTest }: Props) {
   const heading = useRef<HTMLHeadingElement>(null)
 
   useEffect(() => {
@@ -23,9 +27,15 @@ export function CompleteScreen({ nickname, chapterTitle, onStartAgain }: Props) 
       <p className="text-xl">
         Amazing work, {nickname}! You finished every idea in {chapterTitle}.
       </p>
-      <button type="button" className={bigBtn} onClick={onStartAgain}>
-        Start again
-      </button>
+      <div className="flex flex-wrap justify-center gap-3">
+        <button type="button" className={bigBtn} onClick={onTakeTest}>
+          Take the test
+        </button>
+        <button type="button" className={softBtn} onClick={onStartAgain}>
+          Start again
+        </button>
+      </div>
+      <TestHistory tests={history} />
       <Confetti />
     </section>
   )

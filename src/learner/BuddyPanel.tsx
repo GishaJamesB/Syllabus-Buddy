@@ -12,7 +12,7 @@ interface Props {
   onAsk: (text: string) => void
 }
 
-function Badge({ source }: { source: 'on_device' | 'in_cloud' | null }) {
+export function Badge({ source }: { source: 'on_device' | 'in_cloud' | null }) {
   if (!source) return null
   return (
     <span className="ml-2 inline-block rounded-full bg-white px-3 py-1 text-sm font-extrabold text-purple">

@@ -8,9 +8,10 @@ interface Props {
   question: Question
   answered: { text: string; unit: Unit | null } | null
   onSubmit: (input: { text: string; unit: Unit | null }) => void
+  submitLabel?: string
 }
 
-export function AnswerBox({ question, answered, onSubmit }: Props) {
+export function AnswerBox({ question, answered, onSubmit, submitLabel = 'Check my answer' }: Props) {
   const dollars = question.answer.unit === 'S$'
   const [text, setText] = useState(answered?.text ?? '')
   const [unit, setUnit] = useState<Unit | null>(answered?.unit ?? null)
@@ -67,7 +68,7 @@ export function AnswerBox({ question, answered, onSubmit }: Props) {
       )}
       {!locked && (
         <button type="submit" className={bigBtn}>
-          Check my answer
+          {submitLabel}
         </button>
       )}
     </form>

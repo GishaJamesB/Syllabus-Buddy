@@ -14,6 +14,8 @@ import LearnerApp from './LearnerApp'
 import { checkQuestion, firstCheckSeed, freshSeed, mistakeHistory, MISSES_BEFORE_HELP, newProfile, recordAttempt } from './progress'
 import { grade } from '../maths/grade'
 import { memoryStore, openStore, type Store } from './store'
+import { testQuestion, type TestRecord } from './test'
+import { createRng } from '../maths/rng'
 
 const lesson = lessonJson as Lesson
 let n = 0
@@ -46,10 +48,10 @@ async function addNickname(name: string) {
   fireEvent.click(screen.getByRole('button', { name: 'Start learning' }))
 }
 
-function type(text: string, unit: string | null) {
+function type(text: string, unit: string | null, submit = 'Check my answer') {
   fireEvent.change(screen.getByLabelText(/^Your answer/), { target: { value: text } })
   if (unit && unit !== 'S$') fireEvent.click(screen.getByRole('button', { name: unit }))
-  fireEvent.click(screen.getByRole('button', { name: 'Check my answer' }))
+  fireEvent.click(screen.getByRole('button', { name: submit }))
 }
 
 const status = () => screen.getAllByRole('status').map((s) => s.textContent).join(' ')
@@ -833,5 +835,274 @@ describe('Tutor gates and navigation', () => {
         ],
       }),
     ])
+  })
+})
+
+describe('Weak-spot test', () => {
+  let clock = 1_000_000
+  const now = () => clock
+  const random = () => {
+    const rng = createRng(++n)
+    return () => rng.int(0, 999_999_999) / 1_000_000_000
+  }
+
+  async function startTestApp(open: () => Promise<Store>, buddy: BuddyService = restingBuddy()) {
+    render(<LearnerApp open={open} lessonData={lessonJson} buddy={buddy} now={now} random={random()} />)
+    await screen.findByText("Who's learning?")
+    await act(async () => {})
+  }
+
+  async function openTest(open: () => Promise<Store>) {
+    fireEvent.click(screen.getByRole('button', { name: 'Test' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Begin' }))
+    await screen.findByText('Question 1 of 10')
+    return (await saved(open)).progress.tests[0]
+  }
+
+  const shownIndex = () => Number(/Question (\d+) of 10/.exec(document.body.textContent ?? '')?.[1]) - 1
+
+  function answerRight(test: TestRecord) {
+    const q = testQuestion(test.questions[shownIndex()])
+    type(String(q.answer.value), q.answer.unit, 'Save answer')
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }))
+  }
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('runs a test with no marking, then shows corrections, steps and a Buddy "Why?" with its badge', async () => {
+    clock = 1_000_000
+    const buddy = fakeBuddy()
+    const open = dbOpener()
+    await startTestApp(open, buddy.service)
+    await addNickname('Riya')
+    await screen.findByText('Idea 1 of 7')
+    const test = await openTest(open)
+    expect(test.startedAt).toBe(clock)
+    expect(screen.getByRole('timer').textContent).toBe('20:00 left')
+    expect(screen.getByRole('timer').getAttribute('aria-live')).toBe('off')
+    expect(screen.queryByRole('button', { name: 'Back' })).toBeNull()
+
+    const first = testQuestion(test.questions[0])
+    const wrong = first.answer.value + 1
+    expect((screen.getByRole('button', { name: 'Next' }) as HTMLButtonElement).disabled).toBe(true)
+    type(String(wrong), first.answer.unit === 'S$' ? null : first.answer.unit, 'Save answer')
+    expect(status()).not.toContain('Not quite')
+    expect((screen.getByRole('button', { name: 'Next' }) as HTMLButtonElement).disabled).toBe(false)
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }))
+    await screen.findByText('Question 2 of 10')
+    fireEvent.click(screen.getByRole('button', { name: 'Skip' }))
+    await screen.findByText('Question 3 of 10')
+    for (let i = 2; i < 10; i++) answerRight(test)
+
+    await screen.findByText('Test results')
+    expect(screen.getByText('8 out of 10')).toBeTruthy()
+    const card1 = within(screen.getByRole('listitem', { name: 'Question 1' }))
+    expect(card1.getByText('✘')).toBeTruthy()
+    expect(card1.getByText('Not quite. Look at the example again')).toBeTruthy()
+    expect(card1.getByText(formatAnswer(first.answer))).toBeTruthy()
+    expect(card1.getByText(first.steps[first.steps.length - 1])).toBeTruthy()
+    const card2 = within(screen.getByRole('listitem', { name: 'Question 2' }))
+    expect(card2.getByText('No answer given')).toBeTruthy()
+    expect(card2.getByText(formatAnswer(testQuestion(test.questions[1]).answer))).toBeTruthy()
+    expect(within(screen.getByRole('listitem', { name: 'Question 3' })).getByText('✔')).toBeTruthy()
+
+    fireEvent.click(card1.getByRole('button', { name: 'Why?' }))
+    await buddy.reply({ text: json('answer_attempt', null, 'Count every side once.'), source: 'in_cloud' })
+    expect(card1.getByText('Count every side once.')).toBeTruthy()
+    expect(card1.getByText('☁️ Cloud')).toBeTruthy()
+
+    const p = (await saved(open)).progress
+    expect(p.tests[0].finishedAt).not.toBeNull()
+    expect(p.tests[0].answers[1]).toBeNull()
+    expect(p.tests[0].results[1]).toEqual({ correct: false, reason: 'blank', code: null })
+    expect(p.buddyTurns).toEqual([expect.objectContaining({ ideaId: test.questions[0].ideaId, kind: 'miss', source: 'in_cloud' })])
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Back to lesson' })[0])
+    await screen.findByText('Idea 1 of 7')
+    fireEvent.click(screen.getByRole('button', { name: 'Test' }))
+    expect(within(await screen.findByRole('list', { name: 'Your last tests' })).getByText(/8 out of 10 on/)).toBeTruthy()
+  })
+
+  it('resumes on the next unanswered question after a reload with the timer continuing', async () => {
+    clock = 1_000_000
+    const open = dbOpener()
+    await startTestApp(open)
+    await addNickname('Riya')
+    await screen.findByText('Idea 1 of 7')
+    const test = await openTest(open)
+    for (let i = 0; i < 3; i++) answerRight(test)
+    await screen.findByText('Question 4 of 10')
+    await act(async () => {})
+    cleanup()
+
+    clock += 65_000
+    await startTestApp(open)
+    fireEvent.click(screen.getByRole('button', { name: 'Riya' }))
+    await screen.findByText('Question 4 of 10')
+    expect(screen.getByRole('timer').textContent).toBe('18:55 left')
+    expect(screen.getByRole('button', { name: 'Back to lesson' })).toBeTruthy()
+  })
+
+  it('ends the test when time runs out and marks the rest blank', async () => {
+    clock = 1_000_000
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
+    const open = dbOpener()
+    await startTestApp(open)
+    await addNickname('Riya')
+    await screen.findByText('Idea 1 of 7')
+    const test = await openTest(open)
+    for (let i = 0; i < 5; i++) answerRight(test)
+    await screen.findByText('Question 6 of 10')
+
+    clock = test.startedAt + test.timeLimitS * 1000 - 30_000
+    await act(async () => vi.advanceTimersByTime(1000))
+    expect(screen.getByText('One minute left')).toBeTruthy()
+    clock = test.startedAt + test.timeLimitS * 1000
+    await act(async () => vi.advanceTimersByTime(1000))
+    await screen.findByText('Test results')
+    expect(screen.getByText('5 out of 10')).toBeTruthy()
+    const results = (await saved(open)).progress.tests[0].results
+    expect(results.slice(5).every((r) => r?.reason === 'blank')).toBe(true)
+  })
+
+  it('finishes and marks a test on load when the time ran out while closed', async () => {
+    clock = 1_000_000
+    const open = dbOpener()
+    await startTestApp(open)
+    await addNickname('Riya')
+    await screen.findByText('Idea 1 of 7')
+    const test = await openTest(open)
+    answerRight(test)
+    await screen.findByText('Question 2 of 10')
+    await act(async () => {})
+    cleanup()
+
+    clock = test.startedAt + test.timeLimitS * 1000 + 1
+    await startTestApp(open)
+    fireEvent.click(screen.getByRole('button', { name: 'Riya' }))
+    await screen.findByText('Test results')
+    expect(screen.getByText('1 out of 10')).toBeTruthy()
+    expect((await saved(open)).progress.tests[0].finishedAt).toBe(clock)
+  })
+
+  it('keeps the steps when Buddy is resting and the "Why?" fails', async () => {
+    clock = 1_000_000
+    const open = dbOpener()
+    await startTestApp(open)
+    await addNickname('Riya')
+    await screen.findByText('Idea 1 of 7')
+    await openTest(open)
+    for (let i = 0; i < 10; i++) fireEvent.click(screen.getByRole('button', { name: 'Skip' }))
+    await screen.findByText('Test results')
+    expect(screen.getByText('0 out of 10')).toBeTruthy()
+    const card1 = within(screen.getByRole('listitem', { name: 'Question 1' }))
+    fireEvent.click(card1.getByRole('button', { name: 'Why?' }))
+    expect(await card1.findByText('Buddy is resting right now')).toBeTruthy()
+    expect(card1.getByRole('list')).toBeTruthy()
+  })
+
+  it('lets the learner leave a test and resume it from the Complete screen', async () => {
+    clock = 1_000_000
+    const open = dbOpener()
+    let profile = newProfile('Riya', 'riya', lesson, 0)
+    profile = { ...profile, progress: { ...profile.progress, currentIdeaId: null, passedIdeaIds: lesson.ideas.map((i) => i.id) } }
+    await (await open()).addProfile(profile)
+    await startTestApp(open)
+    fireEvent.click(screen.getByRole('button', { name: 'Riya' }))
+    await screen.findByText('Chapter complete')
+    fireEvent.click(screen.getByRole('button', { name: 'Take the test' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Begin' }))
+    await screen.findByText('Question 1 of 10')
+    fireEvent.click(screen.getByRole('button', { name: 'Skip' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Back to lesson' }))
+    await screen.findByText('Chapter complete')
+    fireEvent.click(screen.getByRole('button', { name: 'Take the test' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Resume' }))
+    await screen.findByText('Question 2 of 10')
+    expect((await saved(open)).progress.tests).toHaveLength(1)
+  })
+
+  it('shows the corrections when Test finishes a test that ran out while in the lesson', async () => {
+    clock = 1_000_000
+    const open = dbOpener()
+    await startTestApp(open)
+    await addNickname('Riya')
+    await screen.findByText('Idea 1 of 7')
+    fireEvent.click(screen.getByRole('button', { name: 'Test' }))
+    expect(await screen.findByText('You have 20:00 for the whole test. The clock starts when you press Begin.')).toBeTruthy()
+    expect(screen.getByText(/skip or don't reach before time runs out count as wrong/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Begin' }))
+    const test = (await saved(open)).progress.tests[0]
+    answerRight(test)
+    await screen.findByText('Question 2 of 10')
+    fireEvent.click(screen.getByRole('button', { name: 'Back to lesson' }))
+    await screen.findByText('Idea 1 of 7')
+    expect(screen.getByRole('button', { name: 'Resume test' })).toBeTruthy()
+
+    clock = test.startedAt + test.timeLimitS * 1000 + 1
+    fireEvent.click(screen.getByRole('button', { name: 'Resume test' }))
+    await screen.findByText('Test results')
+    expect(screen.getByText('1 out of 10')).toBeTruthy()
+    fireEvent.click(screen.getAllByRole('button', { name: 'Back to lesson' })[0])
+    await screen.findByText('Idea 1 of 7')
+    expect(screen.getByRole('button', { name: 'Test' })).toBeTruthy()
+  })
+
+  it('shows "Why?" again after a failed reply so the learner can retry', async () => {
+    clock = 1_000_000
+    const buddy = fakeBuddy()
+    const open = dbOpener()
+    await startTestApp(open, buddy.service)
+    await addNickname('Riya')
+    await screen.findByText('Idea 1 of 7')
+    await openTest(open)
+    for (let i = 0; i < 10; i++) fireEvent.click(screen.getByRole('button', { name: 'Skip' }))
+    await screen.findByText('Test results')
+    const card1 = within(screen.getByRole('listitem', { name: 'Question 1' }))
+    expect(card1.getByText('Wrong')).toBeTruthy()
+    fireEvent.click(card1.getByRole('button', { name: 'Why?' }))
+    await buddy.reply(new Error('offline'))
+    expect(card1.getByText('Buddy is resting right now')).toBeTruthy()
+    fireEvent.click(card1.getByRole('button', { name: 'Why?' }))
+    await buddy.reply({ text: json('answer_attempt', null, 'Try adding every side.'), source: 'on_device' })
+    expect(card1.getByText('Try adding every side.')).toBeTruthy()
+    expect(card1.queryByRole('button', { name: 'Why?' })).toBeNull()
+    expect(buddy.prompts[0]).toContain('(no unit)')
+  })
+
+  it('lists a finished test score on the Complete screen', async () => {
+    clock = 1_000_000
+    const open = dbOpener()
+    let profile = newProfile('Riya', 'riya', lesson, 0)
+    profile = { ...profile, progress: { ...profile.progress, currentIdeaId: null, passedIdeaIds: lesson.ideas.map((i) => i.id) } }
+    await (await open()).addProfile(profile)
+    await startTestApp(open)
+    fireEvent.click(screen.getByRole('button', { name: 'Riya' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Take the test' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Begin' }))
+    await screen.findByText('Question 1 of 10')
+    const test = (await saved(open)).progress.tests[0]
+    answerRight(test)
+    for (let i = 1; i < 10; i++) fireEvent.click(screen.getByRole('button', { name: 'Skip' }))
+    await screen.findByText('Test results')
+    fireEvent.click(screen.getAllByRole('button', { name: 'Back to lesson' })[0])
+    await screen.findByText('Chapter complete')
+    expect(within(screen.getByRole('list', { name: 'Your last tests' })).getByText(/^1 out of 10 on/)).toBeTruthy()
+  })
+
+  it('enables the header Test button again once the tutor session ends', async () => {
+    const tutor = tutorBuddy([new Error('[400 ] bad request')])
+    await escalate(tutor)
+    expect(await screen.findByText("The tutor can't help right now")).toBeTruthy()
+    await vi.waitFor(() => expect((screen.getByRole('button', { name: 'Test' }) as HTMLButtonElement).disabled).toBe(false))
+  })
+
+  it('disables the header Test button while a tutor session runs', async () => {
+    const tutor = tutorBuddy(['hang'])
+    await escalate(tutor)
+    await vi.waitFor(() => expect(tutor.requests).toHaveLength(1))
+    expect((screen.getByRole('button', { name: 'Test' }) as HTMLButtonElement).disabled).toBe(true)
   })
 })
