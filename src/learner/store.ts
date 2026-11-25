@@ -13,7 +13,7 @@ const DB_NAME = 'syllabus-buddy'
 const STORE = 'profiles'
 const OPEN_TIMEOUT_MS = 3000
 
-const byRecent = (a: Profile, b: Profile) => (b.progress?.updatedAt ?? 0) - (a.progress?.updatedAt ?? 0)
+export const byRecent =(a: Profile, b: Profile) => (b.progress?.updatedAt ?? 0) - (a.progress?.updatedAt ?? 0)
 
 export class NicknameTakenError extends Error {
   constructor() {

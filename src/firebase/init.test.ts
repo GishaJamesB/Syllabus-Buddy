@@ -54,6 +54,12 @@ vi.mock('firebase/auth', () => ({
     return { user: { uid: 'u1' } }
   },
 }))
+vi.mock('firebase/firestore', () => ({
+  initializeFirestore: () => ({ name: 'firestore' }),
+  persistentLocalCache: () => ({}),
+  persistentMultipleTabManager: () => ({}),
+  memoryLocalCache: () => ({}),
+}))
 vi.mock('firebase/ai', () => ({
   FunctionCallingMode: { AUTO: 'AUTO' },
   getAI: () => ({}),
@@ -155,6 +161,10 @@ describe('initFirebase', () => {
     await vi.waitFor(() => expect(service.status().phase).toBe('ready'))
     expect(brainRow(service.status()).kind).toBe('cloud')
     expect(service.tuning().inference_mode).toBe('only_in_cloud')
+  })
+
+  it('returns the Firestore instance', async () => {
+    expect((await initFirebase(config)).firestore).toEqual({ name: 'firestore' })
   })
 
   it('builds the summary model on-device only with no prompt options', async () => {

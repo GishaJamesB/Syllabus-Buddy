@@ -6,7 +6,7 @@ A private, on-device-first maths tutor for one NCERT chapter: *Ganita Prakash* G
 
 Syllabus Buddy teaches a 12-year-old one idea at a time, checks each idea with a question, and helps when the child gets stuck. When Gemini Nano is ready in Chrome, quick help runs on the child's own computer, so it is fast, free, works offline and keeps the child's words on the device. On a computer without Nano, quick help falls back to the cloud and sends the child's answer or question (see [Privacy](#privacy)). When the child is really stuck, a cloud tutor takes over, and it gets an anonymised summary of the mistakes, never what the child typed.
 
-Privacy is the reason the app is hybrid. The child uses a nickname, there are no logins, and progress stays in the browser.
+Privacy is the reason the app is hybrid. The child uses a nickname, there are no logins, and progress is tied to the browser's anonymous account.
 
 ## Features
 
@@ -16,7 +16,7 @@ Privacy is the reason the app is hybrid. The child uses a nickname, there are no
 - **Tutor agent.** After 3 misses on an idea (tunable), a cloud agent picks its own tools (diagram, practice question, worked solution, navigation) until the child gets it right or runs out of turns. A "What the AI did" panel shows the exact summary it was sent and every tool call in order.
 - **Weak-spot test.** 10 questions with new numbers each time, weighted toward the child's mistakes, with a timer per question difficulty. Wrong answers show the correct answer, worked steps and a **Why?** button.
 - **Buddy's brain status.** The start screen shows whether Buddy is on-device, downloading, or using the cloud, with a **Get on-device Buddy** button when Nano can be downloaded.
-- **Nicknames and local progress.** Several children can share a device. Progress, mistakes and test history are saved in IndexedDB.
+- **Nicknames and saved progress.** Several children can share a device. Progress, mistakes and test history are saved in Cloud Firestore under the browser's anonymous account, with IndexedDB as a fallback when Firebase is unavailable.
 - **Read aloud.** A speaker button reads the lesson and clues with the browser's built-in speech.
 - **For grown-ups.** A panel lists the child's most common mistakes in plain language and recent test scores, with a short note written on-device when Nano is available.
 - **Remote tuning.** Turn limits, the help threshold, test timers and the inference mode can be changed in Remote Config without a redeploy.
@@ -43,7 +43,7 @@ flowchart LR
     UI[Lesson UI + badges + agent panel]
     Loop[App agent loop]
     Engine[Deterministic engine: templates, grader, SVG]
-    DB[(IndexedDB progress)]
+    DB[(Firestore progress)]
     Nano[Gemini Nano on-device]
   end
   subgraph Firebase
@@ -68,7 +68,7 @@ flowchart LR
 
 ## Privacy
 
-- **Never leaves the device:** the nickname, progress, saved mistake history and test scores. They live in IndexedDB. There is no database on a server.
+- **Saved progress:** the nickname, progress, saved mistake history and test scores are stored in Cloud Firestore under the browser's anonymous account. The security rules let only that account read or write them. Without a sign-in, they are tied to this one browser. If Firebase is unavailable, the app falls back to IndexedDB on the device.
 - **The tutor agent** gets only the anonymised summary shown in its panel (idea title and key points, template, difficulty, miss count, mistake codes, history counts, max turns), plus each practice question's prompt and whether it was right, with the reason and mistake code. It never gets the child's typed text or nickname.
 - **Buddy turns** (clues after a miss, Ask Buddy and the test's **Why?**) run on Gemini Nano when it is available, so the child's answer and Ask Buddy text stay on the device. On a device without Nano, Buddy falls back to the cloud and sends that text, including the saved test answer for **Why?**. This is a deliberate owner decision, so that every child gets help. Set `inference_mode` to `only_on_device` to turn the fallback off.
 - **Sign-in** is Anonymous Auth only. No names, emails or logins.

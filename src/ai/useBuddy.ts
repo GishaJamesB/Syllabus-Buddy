@@ -7,6 +7,7 @@ import type { TutorModel } from './tutorAgent'
 import { DEFAULT_TUNING, type TuningValues } from '../config/tuning'
 import { readConfig, type AppConfig } from '../firebase/config'
 import type { FirebaseServices } from '../firebase/init'
+import { sharedFirebase } from '../firebase/shared'
 
 export type DeviceTurnModel = TurnModel & {
   initializeDeviceModel?(onProgress?: (progress: number) => void): Promise<void>
@@ -115,13 +116,7 @@ export function createBuddyService(load: () => Promise<BuddyBackend>): BuddyServ
 async function loadFirebaseBackend(): Promise<BuddyBackend> {
   const result = readConfig(import.meta.env as Record<string, string | undefined>)
   if (!result.ok) throw new Error(`Missing environment variables: ${result.missing.join(', ')}`)
-  const { initFirebase } = await import('../firebase/init')
-  const { describeError } = await import('../firebase/describeError')
-  try {
-    return backendFrom(await initFirebase(result.config), result.config)
-  } catch (e) {
-    throw new Error(describeError(e))
-  }
+  return backendFrom(await sharedFirebase(), result.config)
 }
 
 export function backendFrom(

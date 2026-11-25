@@ -9,7 +9,7 @@ You create every resource yourself. Nothing in this repo creates or changes Fire
 ## 2. Register the web app
 1. Project overview, **Add app**, choose Web (`</>`).
 2. Give it a nickname. Skip Firebase Hosting for now.
-3. Copy the `firebaseConfig` values; they go into `.env.local` (step 7).
+3. Copy the `firebaseConfig` values; they go into `.env.local` (step 8).
 
 ## 3. Enable Firebase AI Logic with the Gemini Developer API
 1. In the console open **Build, AI Logic**, then **Get started**.
@@ -17,37 +17,43 @@ You create every resource yourself. Nothing in this repo creates or changes Fire
 
 ## 4. Create a reCAPTCHA Enterprise key
 1. In Google Cloud Console (same project) open **Security, reCAPTCHA Enterprise**, and enable the API if asked.
-2. **Create key**, platform **Website**, add your hosted domain (for example `<project-id>.web.app`). Do not add `localhost`; local development uses the debug token from step 8 instead.
+2. **Create key**, platform **Website**, add your hosted domain (for example `<project-id>.web.app`). Do not add `localhost`; local development uses the debug token from step 9 instead.
 3. Leave the checkbox challenge off so the key is score-based.
 4. Copy the key ID; it is `VITE_RECAPTCHA_ENTERPRISE_KEY`.
 
 ## 5. Register the key in App Check
 1. Firebase console, **Build, App Check**, **Apps** tab.
 2. Choose your web app, **reCAPTCHA Enterprise**, paste the key ID, save.
-3. Under **APIs**, enforce App Check for **Firebase AI Logic** (do this after step 8 works, so you are not locked out while testing).
+3. Under **APIs**, enforce App Check for **Firebase AI Logic** and for **Cloud Firestore** (do this after step 9 works, so you are not locked out while testing).
 
 ## 6. Enable Anonymous Auth
 Firebase console, **Build, Authentication, Sign-in method**, enable **Anonymous**.
 
-## 7. Prepare `.env.local`
+## 7. Create the Cloud Firestore database
+1. Firebase console, **Build, Firestore Database**, **Create database**.
+2. Choose the **Standard** edition (Native mode) and a region close to your learners. The region cannot be changed later.
+3. Start in **production mode**.
+4. Deploy the security rules from this folder (needs the setup in [deploy.md](deploy.md) section 1): `firebase deploy --only firestore:rules`. They let each anonymous user read and write only `users/<uid>/profiles/*` and deny everything else.
+
+## 8. Prepare `.env.local`
 ```
 cp .env.example .env.local
 ```
 Fill in the values from steps 2 and 4. Set `VITE_INFERENCE_MODE` to `prefer_on_device` (default), `only_on_device`, `only_in_cloud` or `prefer_in_cloud`.
 
-## 8. Register the debug token
+## 9. Register the debug token
 1. Run `npm install` then `npm run dev` and open the page with DevTools console open.
 2. The Firebase SDK prints `App Check debug token: <uuid>`.
 3. Firebase console, **App Check, Apps**, your web app, menu, **Manage debug tokens**, **Add debug token**, paste it.
 4. Reload. The page should show an anonymous user ID with no App Check error. If it shows an App Check error, this step is the usual cause.
 
-## 9. Enable Chrome's on-device model
+## 10. Enable Chrome's on-device model
 1. Use desktop Chrome 139 or later.
 2. Open `chrome://flags/#prompt-api-for-gemini-nano-multimodal-input` (named `#prompt-api-for-gemini-nano` in some versions) and set it to **Enabled** (also enable `chrome://flags/#optimization-guide-on-device-model` set to **Enabled BypassPerfRequirement** if the model stays unavailable).
 3. Relaunch Chrome. Check `chrome://on-device-internals` for model status.
 4. On `/diagnostics` click **Prepare on-device model** to download it (needs a user click). Learners can also click **Get on-device Buddy** on the start screen.
 
-## 10. Tune the app with Remote Config (optional)
+## 11. Tune the app with Remote Config (optional)
 The app works without this step; every value below has a safe default in code. Remote Config lets you change these values without redeploying, so publish the keys if you want to switch the inference mode on the live site.
 
 1. Firebase console, **Run, Remote Config**, **Create configuration** (or **Add parameter**).
@@ -70,5 +76,5 @@ A published `inference_mode` overrides `VITE_INFERENCE_MODE`. Delete the paramet
 
 Values that arrive while a child is mid-lesson apply from the next question, tutor session or test.
 
-## 11. Deploy
+## 12. Deploy
 See [deploy.md](deploy.md) to put the app on Firebase Hosting.

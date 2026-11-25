@@ -39,7 +39,8 @@ import {
   type Profile,
   type Progress,
 } from './progress'
-import { memoryStore, NicknameTakenError, openStore, type Store } from './store'
+import { openLearnerStore } from './defaultOpen'
+import { memoryStore, NicknameTakenError, type Store } from './store'
 import { smallBtn } from './styles'
 import {
   answerTest,
@@ -76,7 +77,7 @@ type View =
   | { kind: 'test'; running: boolean; plan: { questions: TestQuestionRef[]; timeLimitS: number } | null }
   | { kind: 'results'; testId: string }
 
-const defaultOpen = () => openStore()
+const defaultOpen = () => openLearnerStore()
 
 function buddyTurnFor(context: TurnContext, request: BuddyRequest, reply: BuddyReply): Omit<BuddyTurn, 'at'> {
   const miss = request.kind === 'miss' ? request.turn.result : null

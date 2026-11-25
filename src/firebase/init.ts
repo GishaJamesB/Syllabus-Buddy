@@ -11,7 +11,9 @@ import {
   type FunctionDeclaration,
 } from 'firebase/ai'
 import { activate, ensureInitialized, fetchConfig, getRemoteConfig, getValue, isSupported } from 'firebase/remote-config'
+import type { Firestore } from 'firebase/firestore'
 import type { AppConfig, InferenceModeValue } from './config'
+import { openFirestore } from './firestoreDb'
 import { turnJsonSchema } from '../ai/turnSchema'
 import { withTimeout } from '../ai/buddy'
 import {
@@ -37,6 +39,7 @@ const MODES: Record<InferenceModeValue, InferenceMode> = {
 export interface FirebaseServices {
   app: FirebaseApp
   uid: string
+  firestore: Firestore
   tuning: TuningState
   createTurnModel: () => ReturnType<typeof getGenerativeModel>
   createAuthorModel: (model: string, timeoutMs: number, responseJsonSchema: Record<string, unknown>) => ReturnType<typeof getGenerativeModel>
@@ -86,6 +89,8 @@ export async function initFirebase(config: AppConfig): Promise<FirebaseServices>
   await getToken(appCheck)
 
   const cred = await signInAnonymously(getAuth(app))
+
+  const firestore = openFirestore(app)
 
   const tuning = await loadTuning(app, defaultTuning(config.inferenceMode))
 
@@ -153,5 +158,5 @@ export async function initFirebase(config: AppConfig): Promise<FirebaseServices>
       },
     })
 
-  return { app, uid: cred.user.uid, tuning, createTurnModel, createAuthorModel, createTutorModel, createSummaryModel }
+  return { app, uid: cred.user.uid, firestore, tuning, createTurnModel, createAuthorModel, createTutorModel, createSummaryModel }
 }
