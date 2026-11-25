@@ -45,10 +45,10 @@ Fill in the values from steps 2 and 4. Set `VITE_INFERENCE_MODE` to `prefer_on_d
 1. Use desktop Chrome 139 or later.
 2. Open `chrome://flags/#prompt-api-for-gemini-nano-multimodal-input` (named `#prompt-api-for-gemini-nano` in some versions) and set it to **Enabled** (also enable `chrome://flags/#optimization-guide-on-device-model` set to **Enabled BypassPerfRequirement** if the model stays unavailable).
 3. Relaunch Chrome. Check `chrome://on-device-internals` for model status.
-4. On the spike page click **Prepare on-device model** to download it (needs a user click).
+4. On `/diagnostics` click **Prepare on-device model** to download it (needs a user click). Learners can also click **Get on-device Buddy** on the start screen.
 
 ## 10. Tune the app with Remote Config (optional)
-The app works without this step; every value below has a safe default in code. Remote Config lets you change these values without redeploying.
+The app works without this step; every value below has a safe default in code. Remote Config lets you change these values without redeploying, so publish the keys if you want to switch the inference mode on the live site.
 
 1. Firebase console, **Run, Remote Config**, **Create configuration** (or **Add parameter**).
 2. Add these 6 parameters. Use the exact keys. A value that is not a whole number in range (or not a known mode) is ignored and the default is used.
@@ -70,5 +70,5 @@ A published `inference_mode` overrides `VITE_INFERENCE_MODE`. Delete the paramet
 
 Values that arrive while a child is mid-lesson apply from the next question, tutor session or test.
 
-## 11. Run the checks
-See the README for the three runtime checks and where to record the finding.
+## 11. Deploy
+See [deploy.md](deploy.md) to put the app on Firebase Hosting.

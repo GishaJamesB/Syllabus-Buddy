@@ -1,5 +1,7 @@
 # Syllabus Buddy — Student MVP Specification
 
+> This is the starting idea for the project. The [README](../README.md) describes the app as it is now.
+
 ## 1. Overview
 A child-safe web app built on **Firebase AI Logic** that turns a syllabus or study PDF—starting with NCERT *Ganita Prakash* Grade 6, Chapter 6 (*Perimeter and Area*) as a built-in sample and supporting other subjects in future like history or biology—into step-by-step lessons, hints, and unlimited timed tests for students.
 

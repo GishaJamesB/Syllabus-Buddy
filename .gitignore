@@ -5,3 +5,5 @@ dist
 .env.*.local
 *.pdf
 *.tsbuildinfo
+.firebaserc
+.firebase/
