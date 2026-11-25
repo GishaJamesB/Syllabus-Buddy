@@ -102,8 +102,8 @@ const areaUncovered: Template = {
       numbers: { length: w, breadth: h, inner },
       answer: { value: outer - covered, unit },
       steps: [
-        `Area of the floor = ${w} × ${h} = ${outer}.`,
-        `Area of the mat = ${inner} × ${inner} = ${covered}.`,
+        `Area of the ${whole} = ${w} × ${h} = ${outer}.`,
+        `Area of the ${piece} = ${inner} × ${inner} = ${covered}.`,
         `Uncovered area = ${outer} − ${covered} = ${outer - covered}.`,
         `The uncovered area is ${outer - covered} ${unit}.`,
       ],

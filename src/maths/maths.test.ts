@@ -144,6 +144,17 @@ describe('missing-side templates', () => {
   })
 })
 
+describe('uncovered-area wording', () => {
+  it('names the same objects in the steps as in the prompt', () => {
+    for (const d of DIFFICULTIES) {
+      const q = generate('area_uncovered', d, 1)
+      const [, whole, piece] = q.prompt.match(/A rectangular (.+?) is .* A square (\w+) of side/) ?? []
+      expect(q.steps[0]).toContain(`Area of the ${whole} =`)
+      expect(q.steps[1]).toContain(`Area of the ${piece} =`)
+    }
+  })
+})
+
 describe('known mistakes', () => {
   it('never equal the answer or each other over 200 seeds', () => {
     for (const t of listTemplates()) {
