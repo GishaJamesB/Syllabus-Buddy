@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { InferenceModeValue } from '../firebase/config'
 import type { OnDeviceStatus } from './onDeviceStatus'
 import { DEFAULT_TUNING } from '../config/tuning'
-import { brainRow, createBuddyService, usesCloud, type BrainStatus, type BuddyBackend } from './useBuddy'
+import { brainRow, createBuddyService, oneAtATime, usesCloud, type BrainStatus, type BuddyBackend } from './useBuddy'
 
 const ready = (mode: InferenceModeValue, nano: OnDeviceStatus, download: number | null = null): BrainStatus => ({
   phase: 'ready',
@@ -87,6 +87,61 @@ describe('summaryModel', () => {
     const { service, createSummaryModel } = backendWith(mode, 'available')
     await expect(service.summaryModel()).resolves.toBeTruthy()
     expect(createSummaryModel).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('warm-up', () => {
+  it.each([
+    ['prefer_on_device', 'available', 1],
+    ['only_on_device', 'available', 1],
+    ['only_in_cloud', 'available', 0],
+    ['prefer_in_cloud', 'available', 0],
+    ['prefer_on_device', 'downloadable', 0],
+    ['prefer_on_device', 'unavailable', 0],
+  ] as [InferenceModeValue, OnDeviceStatus, number][])('in %s with %s warms up %i time(s)', async (mode, nano, times) => {
+    const warmUp = vi.fn(async () => {})
+    const service = createBuddyService(async () => ({
+      mode,
+      onDeviceStatus: async () => nano,
+      createTurnModel: () => ({ generateContent: vi.fn() }),
+      warmUp,
+    }))
+    await service.model()
+    expect(warmUp).toHaveBeenCalledTimes(times)
+  })
+
+  it('ignores a failed warm-up', async () => {
+    const service = createBuddyService(async () => ({
+      mode: 'prefer_on_device',
+      onDeviceStatus: async () => 'available',
+      createTurnModel: () => ({ generateContent: vi.fn() }),
+      warmUp: () => Promise.reject(new Error('busy')),
+    }))
+    await expect(service.model()).resolves.toBeTruthy()
+    expect(service.status()).toEqual(ready('prefer_on_device', 'available'))
+  })
+})
+
+describe('oneAtATime', () => {
+  it('starts the next prompt only after the previous one settles, even if it failed', async () => {
+    const order: string[] = []
+    let failFirst!: (e: Error) => void
+    const generateContent = vi.fn((prompt: string) => {
+      order.push(`start ${prompt}`)
+      if (prompt === 'a') return new Promise<never>((_, reject) => (failFirst = reject))
+      return Promise.resolve({ response: { text: () => prompt } })
+    })
+    const model = oneAtATime({ generateContent })
+
+    const a = model.generateContent('a')
+    const b = model.generateContent('b')
+    await Promise.resolve()
+    expect(order).toEqual(['start a'])
+
+    failFirst(new Error('boom'))
+    await expect(a).rejects.toThrow('boom')
+    await expect(b).resolves.toMatchObject({ response: {} })
+    expect(order).toEqual(['start a', 'start b'])
   })
 })
 

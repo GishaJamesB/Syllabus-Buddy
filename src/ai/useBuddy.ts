@@ -19,6 +19,7 @@ export interface BuddyBackend {
   createTutorModel?(tools: FunctionDeclaration[]): TutorModel
   createSummaryModel?(): TurnModel
   onDeviceStatus(): Promise<OnDeviceStatus>
+  warmUp?(): Promise<void>
   tuning?: TuningValues
 }
 
@@ -49,6 +50,11 @@ export function createBuddyService(load: () => Promise<BuddyBackend>): BuddyServ
     listeners.forEach((l) => l())
   }
 
+  function warmUp(b: BuddyBackend, nano: OnDeviceStatus) {
+    if (nano !== 'available' || CLOUD_MODES.includes(b.mode) || !b.warmUp) return
+    b.warmUp().catch(() => {})
+  }
+
   function start(): Promise<BuddyBackend> {
     if (!backend) {
       const attempt = (async () => {
@@ -56,6 +62,7 @@ export function createBuddyService(load: () => Promise<BuddyBackend>): BuddyServ
         const nano = await b.onDeviceStatus().catch((): OnDeviceStatus => 'unavailable')
         tuning = b.tuning ?? { ...DEFAULT_TUNING, inference_mode: b.mode }
         set({ phase: 'ready', mode: b.mode, nano, download: null })
+        warmUp(b, nano)
         return b
       })()
       backend = attempt
@@ -109,6 +116,7 @@ export function createBuddyService(load: () => Promise<BuddyBackend>): BuddyServ
       }
       const nano = await b.onDeviceStatus().catch((): OnDeviceStatus => 'unavailable')
       set({ ...ready, nano, download: null })
+      warmUp(b, nano)
     },
   }
 }
@@ -123,13 +131,34 @@ export function backendFrom(
   services: Pick<FirebaseServices, 'tuning' | 'createTurnModel' | 'createTutorModel' | 'createSummaryModel'>,
   config: Pick<AppConfig, 'tutorModel'>,
 ): BuddyBackend {
+  let turnModel: DeviceTurnModel | null = null
+  const sharedTurnModel = () => (turnModel ??= oneAtATime(services.createTurnModel()))
   return {
     mode: services.tuning.values.inference_mode,
     tuning: services.tuning.values,
-    createTurnModel: () => services.createTurnModel(),
+    createTurnModel: sharedTurnModel,
     createTutorModel: (tools) => services.createTutorModel(config.tutorModel, tools),
     createSummaryModel: () => services.createSummaryModel(),
     onDeviceStatus: getOnDeviceStatus,
+    warmUp: async () => {
+      await sharedTurnModel().generateContent(WARM_UP_PROMPT)
+    },
+  }
+}
+
+const WARM_UP_PROMPT = 'Reply with this JSON only: {"intent": "off_topic", "misconception": null, "clue": null}'
+
+// The Firebase SDK keeps Nano loaded only while one model object holds its last on-device session.
+// Each new prompt on that object replaces the session, so prompts must run one at a time.
+export function oneAtATime(model: DeviceTurnModel): DeviceTurnModel {
+  let queue: Promise<unknown> = Promise.resolve()
+  return {
+    generateContent(prompt) {
+      const run = queue.then(() => model.generateContent(prompt))
+      queue = run.catch(() => {})
+      return run
+    },
+    initializeDeviceModel: model.initializeDeviceModel && ((onProgress) => model.initializeDeviceModel!(onProgress)),
   }
 }
 
