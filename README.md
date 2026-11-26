@@ -23,7 +23,7 @@ Privacy is the reason the app is hybrid. The child uses a nickname, there are no
 
 ## How hybrid AI is used
 
-Every AI call goes through Firebase AI Logic (`firebase/ai`), protected by App Check (reCAPTCHA Enterprise) and Anonymous Auth.
+Every AI call goes through Firebase AI Logic (`firebase/ai`), protected by App Check (reCAPTCHA v3) and Anonymous Auth.
 
 | AI feature | Where it runs | Model | What data it sees |
 |---|---|---|---|

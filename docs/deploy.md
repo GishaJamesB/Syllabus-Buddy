@@ -11,10 +11,10 @@ You run every step yourself. Nothing in this repo deploys or creates cloud resou
 1. Check that `.env.local` has every variable listed in `.env.example`.
 2. Set `VITE_INFERENCE_MODE=prefer_on_device`.
 3. Every `VITE_*` value is baked into the bundle when you build, so those values become public. Only put Firebase web config there, never a secret.
-4. The App Check debug token is never read from env. The app turns debug mode on only under `npm run dev`, so a production build always uses reCAPTCHA Enterprise.
+4. The App Check debug token is never read from env. The app turns debug mode on only under `npm run dev`, so a production build always uses reCAPTCHA v3.
 
 ## 3. Allow the Hosting domains
-1. Google Cloud Console, **Security, reCAPTCHA Enterprise**, open your key, and add both `<project>.web.app` and `<project>.firebaseapp.com` to its domains. Replace `<project>` with your project ID.
+1. In the reCAPTCHA admin console (https://www.google.com/recaptcha/admin), open your v3 key's settings and check it lists both `<project>.web.app` and `<project>.firebaseapp.com` to its domains. Replace `<project>` with your project ID.
 2. Firebase console, **Authentication, Settings, Authorized domains**. Check that both domains are listed. Firebase usually adds them by default.
 
 ## 4. Publish the Remote Config keys

@@ -5,7 +5,7 @@ export const REQUIRED_KEYS = [
   'VITE_FIREBASE_STORAGE_BUCKET',
   'VITE_FIREBASE_MESSAGING_SENDER_ID',
   'VITE_FIREBASE_APP_ID',
-  'VITE_RECAPTCHA_ENTERPRISE_KEY',
+  'VITE_RECAPTCHA_SITE_KEY',
 ] as const
 
 export const INFERENCE_MODES = [
@@ -59,7 +59,7 @@ export function readConfig(env: Record<string, string | undefined>): ConfigResul
         messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID!.trim(),
         appId: env.VITE_FIREBASE_APP_ID!.trim(),
       },
-      recaptchaKey: env.VITE_RECAPTCHA_ENTERPRISE_KEY!.trim(),
+      recaptchaKey: env.VITE_RECAPTCHA_SITE_KEY!.trim(),
       inferenceMode,
       cloudModel: env.VITE_CLOUD_MODEL?.trim() || DEFAULT_CLOUD_MODEL,
       tutorModel: env.VITE_TUTOR_MODEL?.trim() || DEFAULT_TUTOR_MODEL,

@@ -45,7 +45,7 @@ vi.mock('firebase/app-check', () => ({
     calls.push('getToken')
     return { token: 't' }
   },
-  ReCaptchaEnterpriseProvider: class {},
+  ReCaptchaV3Provider: class {},
 }))
 vi.mock('firebase/auth', () => ({
   getAuth: () => ({}),

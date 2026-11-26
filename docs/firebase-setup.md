@@ -15,15 +15,16 @@ You create every resource yourself. Nothing in this repo creates or changes Fire
 1. In the console open **Build, AI Logic**, then **Get started**.
 2. Choose **Gemini Developer API** and accept the prompts (this creates a Gemini API key managed by Firebase; do not copy it into the app).
 
-## 4. Create a reCAPTCHA Enterprise key
-1. In Google Cloud Console (same project) open **Security, reCAPTCHA Enterprise**, and enable the API if asked.
-2. **Create key**, platform **Website**, add your hosted domain (for example `<project-id>.web.app`). Do not add `localhost`; local development uses the debug token from step 9 instead.
-3. Leave the checkbox challenge off so the key is score-based.
-4. Copy the key ID; it is `VITE_RECAPTCHA_ENTERPRISE_KEY`.
+## 4. Create a reCAPTCHA v3 key
+reCAPTCHA v3 works without billing. reCAPTCHA Enterprise needs a billing account, so it is not used here.
+
+1. Open https://www.google.com/recaptcha/admin/create.
+2. Choose **Score based (v3)**, add your hosted domains (`<project-id>.web.app` and `<project-id>.firebaseapp.com`). Do not add `localhost`; local development uses the debug token from step 9 instead.
+3. Submit, then copy both keys. The **site key** is `VITE_RECAPTCHA_SITE_KEY`. The **secret key** goes only into App Check in step 5, never into `.env.local`.
 
 ## 5. Register the key in App Check
 1. Firebase console, **Build, App Check**, **Apps** tab.
-2. Choose your web app, **reCAPTCHA Enterprise**, paste the key ID, save.
+2. Choose your web app, **reCAPTCHA**, paste the secret key, save.
 3. Under **APIs**, enforce App Check for **Firebase AI Logic** and for **Cloud Firestore** (do this after step 9 works, so you are not locked out while testing).
 
 ## 6. Enable Anonymous Auth
