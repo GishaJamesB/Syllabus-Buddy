@@ -1,5 +1,5 @@
 import { initializeApp, type FirebaseApp } from 'firebase/app'
-import { getToken, initializeAppCheck, ReCaptchaV3Provider } from 'firebase/app-check'
+import { getToken, initializeAppCheck, ReCaptchaEnterpriseProvider } from 'firebase/app-check'
 import { getAuth, signInAnonymously } from 'firebase/auth'
 import {
   FunctionCallingMode,
@@ -82,7 +82,7 @@ export async function initFirebase(config: AppConfig): Promise<FirebaseServices>
   const app = initializeApp(config.firebase)
 
   const appCheck = initializeAppCheck(app, {
-    provider: new ReCaptchaV3Provider(config.recaptchaKey),
+    provider: new ReCaptchaEnterpriseProvider(config.recaptchaKey),
     isTokenAutoRefreshEnabled: true,
   })
 

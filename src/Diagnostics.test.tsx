@@ -15,7 +15,7 @@ const ENV = {
   VITE_FIREBASE_STORAGE_BUCKET: 'demo.appspot.com',
   VITE_FIREBASE_MESSAGING_SENDER_ID: '1',
   VITE_FIREBASE_APP_ID: 'app',
-  VITE_RECAPTCHA_SITE_KEY: 'site',
+  VITE_RECAPTCHA_ENTERPRISE_KEY: 'site',
 }
 
 beforeEach(() => {

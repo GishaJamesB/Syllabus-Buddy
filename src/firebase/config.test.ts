@@ -10,8 +10,8 @@ describe('readConfig', () => {
   })
 
   it('lists only the missing keys, treating blanks as missing', () => {
-    const r = readConfig({ ...full, VITE_FIREBASE_APP_ID: '  ', VITE_RECAPTCHA_SITE_KEY: undefined })
-    expect(r).toEqual({ ok: false, missing: ['VITE_FIREBASE_APP_ID', 'VITE_RECAPTCHA_SITE_KEY'] })
+    const r = readConfig({ ...full, VITE_FIREBASE_APP_ID: '  ', VITE_RECAPTCHA_ENTERPRISE_KEY: undefined })
+    expect(r).toEqual({ ok: false, missing: ['VITE_FIREBASE_APP_ID', 'VITE_RECAPTCHA_ENTERPRISE_KEY'] })
   })
 
   it('defaults the inference mode', () => {
