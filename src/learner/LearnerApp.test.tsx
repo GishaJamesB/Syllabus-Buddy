@@ -70,7 +70,8 @@ describe('LearnerApp', () => {
     await start(open)
     await addNickname('Riya')
     await screen.findByText('Idea 1 of 7')
-    fireEvent.click(screen.getByRole('button', { name: 'Switch learner' }))
+    cleanup()
+    await start(open)
     await screen.findByRole('button', { name: 'Riya' })
     await addNickname('riya ')
     expect(await screen.findByText('That nickname is taken on this device')).toBeTruthy()
@@ -558,24 +559,6 @@ describe('Buddy', () => {
     expect((await saved(open)).progress.buddyTurns).toHaveLength(2)
   })
 
-  it("does not show learner A's clue to a new learner B", async () => {
-    const buddy = fakeBuddy()
-    await startWith(buddy)
-    await addNickname('Asha')
-    await screen.findByText('Idea 1 of 7')
-    type('1', 'cm')
-    await buddy.reply({ text: json('answer_attempt', null, 'Clue for Asha.'), source: 'on_device' })
-    type('2', null)
-    fireEvent.click(screen.getByRole('button', { name: 'Switch learner' }))
-    await screen.findByRole('button', { name: 'Asha' })
-    await addNickname('Bilal')
-    await screen.findByText('Idea 1 of 7')
-    await buddy.reply({ text: json('answer_attempt', null, 'Late clue for Asha.'), source: 'on_device' })
-    expect(screen.queryByText('Clue for Asha.')).toBeNull()
-    expect(screen.queryByText('Late clue for Asha.')).toBeNull()
-    expect(screen.queryByText('Buddy says')).toBeNull()
-  })
-
   it('shows the cloud note during a download only when the cloud can be used', async () => {
     await startWith(fakeBuddy({ nano: 'downloading' }))
     await addNickname('Riya')
@@ -690,6 +673,7 @@ describe('Tutor', () => {
     for (let i = 0; i < MISSES_BEFORE_HELP; i++) type('999999', 'cm')
 
     expect(screen.getByText('☁️ Tutor')).toBeTruthy()
+    expect(screen.queryByText('Buddy is thinking…')).toBeNull()
     await screen.findByText(practice.prompt)
     expect(screen.getByText('Sent to the cloud')).toBeTruthy()
     expect(screen.getByText('Try this one, add every side.')).toBeTruthy()
@@ -795,18 +779,6 @@ describe('Tutor', () => {
     for (let i = 0; i < MISSES_BEFORE_HELP; i++) type('999999', 'cm')
     expect(screen.getByText("The tutor can't help right now")).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Show me how' })).toBeTruthy()
-  })
-
-  it('keeps an unfinished session as failed when the learner switches', async () => {
-    const tutor = tutorBuddy(['hang'])
-    const open = await escalate(tutor)
-    await vi.waitFor(() => expect(tutor.requests).toHaveLength(1))
-    fireEvent.click(screen.getByRole('button', { name: 'Switch learner' }))
-    await screen.findByRole('button', { name: 'Zanzibar' })
-    const profile = (await (await open()).listProfiles())[0]
-    expect(profile.progress.tutorSessions).toEqual([
-      { ideaId: 'idea-1', seed: firstQuestion(lesson.ideas[0]).seed, startedAt: expect.any(Number), calls: [], results: [], outcome: 'failed' },
-    ])
   })
 })
 

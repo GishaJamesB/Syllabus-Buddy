@@ -224,19 +224,6 @@ export default function LearnerApp({
     return null
   }
 
-  async function switchLearner() {
-    turns.clear()
-    setView({ kind: 'lesson' })
-    setTutorRunning(false)
-    setGrownUps(false)
-    show(null)
-    try {
-      setProfiles(await activeStore.listProfiles())
-    } catch {
-      setSaveFailed(true)
-    }
-  }
-
   const banner = !store.persistent || saveFailed
 
   function openTest() {
@@ -373,7 +360,6 @@ export default function LearnerApp({
   return (
     <Shell
       learner={profile?.nickname ?? null}
-      onSwitch={switchLearner}
       testButton={
         profile
           ? {
@@ -406,20 +392,19 @@ export default function LearnerApp({
 interface ShellProps {
   children: ReactNode
   learner?: string | null
-  onSwitch?: () => void
   testButton?: { label: string; onClick: () => void; disabled: boolean }
   grownUps?: { open: boolean; onClick: () => void; ref: RefObject<HTMLButtonElement | null> }
   banner?: boolean
   credit?: string
 }
 
-function Shell({ children, learner = null, onSwitch, testButton, grownUps, banner = false, credit }: ShellProps) {
+function Shell({ children, learner = null, testButton, grownUps, banner = false, credit }: ShellProps) {
   return (
     <div className="min-h-screen font-sans">
       <header className="bg-purple text-white shadow-card">
         <div className="mx-auto flex max-w-3xl flex-wrap items-center justify-between gap-3 px-4 py-4">
           <h1 className="text-2xl font-extrabold">Syllabus Buddy</h1>
-          {learner && onSwitch && (
+          {learner && (
             <div className="flex items-center gap-3">
               <span className="text-lg font-bold">Hi, {learner}!</span>
               {testButton && (
@@ -432,9 +417,6 @@ function Shell({ children, learner = null, onSwitch, testButton, grownUps, banne
                   For grown-ups
                 </button>
               )}
-              <button type="button" className={smallBtn} onClick={onSwitch}>
-                Switch learner
-              </button>
             </div>
           )}
         </div>

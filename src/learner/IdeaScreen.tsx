@@ -235,7 +235,7 @@ export function IdeaScreen({
         </div>
 
         <BuddyPanel
-          view={shownBuddy}
+          view={tutorActive && shownBuddy?.kind === 'miss' ? null : shownBuddy}
           brain={brain}
           ideaTitle={idea.title}
           previousTitle={previousTitle}
