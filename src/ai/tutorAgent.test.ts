@@ -64,7 +64,7 @@ function fakeModel(script: Step[]) {
 const flush = () => new Promise((r) => setTimeout(r, 0))
 const SEED = 4242
 
-function run(idea: Idea, script: Step[], options: { hasPrevious?: boolean; passed?: boolean } = {}) {
+function run(idea: Idea, script: Step[], options: { hasPrevious?: boolean; passed?: boolean; newSeed?: () => number } = {}) {
   const fake = fakeModel(script)
   const check = checkQuestion(idea, firstCheckSeed(idea))
   const views: TutorView[] = []
@@ -83,7 +83,7 @@ function run(idea: Idea, script: Step[], options: { hasPrevious?: boolean; passe
     onRecord: (r) => records.push(r),
     onMastered: (question, _input, result) => mastered.push({ question, result }),
     onNavigate: (d) => navigated.push(d),
-    newSeed: () => seed++,
+    newSeed: options.newSeed ?? (() => seed++),
     sleep: () => Promise.resolve(),
   })
   return { session, fake, check, views, records, mastered, navigated }
@@ -202,6 +202,47 @@ describe('TutorSession', () => {
     expect(responses(t.fake.requests[2])[0].response).toMatchObject({ error: expect.any(String) })
     expect(t.session.current.items).toEqual([{ kind: 'steps', question: t.check }])
     expect(t.session.current.outcome).toBe('out_of_turns')
+  })
+
+  it('explains the stuck question with questionId "check" before any practice', async () => {
+    const t = run(idea1, [
+      {
+        calls: [
+          { name: 'showDiagram', args: { questionId: 'check' } },
+          { name: 'giveWorkedSolution', args: { questionId: 'check' } },
+        ],
+        text: "Let's look at this one together.",
+      },
+    ])
+    await t.session.start()
+    expect(responses(t.fake.requests[1])).toEqual([
+      { name: 'showDiagram', response: { shown: true } },
+      { name: 'giveWorkedSolution', response: { shown: true } },
+    ])
+    expect(t.session.current.items.slice(0, 3)).toEqual([
+      { kind: 'diagram', question: t.check },
+      { kind: 'steps', question: t.check },
+      { kind: 'say', text: "Let's look at this one together." },
+    ])
+  })
+
+  it('never repeats the answer of an earlier practice question of the same kind', async () => {
+    const make = { name: 'makePractice', args: { templateId: 'perim_rectangle', difficulty: 'easy' } }
+    let calls = 0
+    const t = run(idea1, [{ calls: [make] }, { calls: [make] }], { newSeed: () => (calls++ < 2 ? SEED : SEED + calls) })
+    await t.session.start()
+    const first = t.session.current.awaiting as Question
+    expect(first.answer.value).toBe(practiceOf('perim_rectangle', 'easy').answer.value)
+    t.session.answer({ text: '1', unit: 'cm' })
+    await new Promise((r) => setTimeout(r, 0))
+    const second = t.session.current.awaiting as Question
+    expect(second).not.toBe(first)
+    expect(second.answer.value).not.toBe(first.answer.value)
+  })
+
+  it('tells the model to explain before testing', () => {
+    expect(SYSTEM_INSTRUCTION).toContain('Explain before you test.')
+    expect(SYSTEM_INSTRUCTION).toContain('questionId "check"')
   })
 
   it('refuses navigate next before the idea is passed, allows stay, and ends on back', async () => {

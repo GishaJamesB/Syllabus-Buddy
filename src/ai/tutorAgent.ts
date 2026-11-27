@@ -85,8 +85,10 @@ export const SYSTEM_INSTRUCTION = [
   'Your goal is that the child masters the idea within maxTurns turns.',
   'You receive only an anonymised summary of the idea and the child\'s mistake codes.',
   'Plan your help by calling tools. The app makes every question, number, answer, diagram and worked step.',
-  'Use makePractice to give the child a question; its result tells you if the child was right.',
-  'The idea is mastered when the child answers a practice question made from the idea\'s own templateId correctly.',
+  'Explain before you test. Start by calling showDiagram and giveWorkedSolution with questionId "check", the question the child got stuck on, and write one short sentence such as "Let\'s look at this one together."',
+  'Then use makePractice to give the child a similar question, starting easy; its result tells you if the child was right.',
+  'If the child gets a practice question wrong, show its worked solution before the next one.',
+  'The idea is mastered when the child correctly answers a practice question made from the idea\'s own templateId at the summary\'s difficulty or harder. An easy question answered correctly is good practice but does not finish the session, so follow it with one at the summary\'s difficulty.',
   'You may also write one short, friendly sentence for the child. Never write numbers or answers.',
 ].join('\n')
 
@@ -111,12 +113,13 @@ export function tutorTools(idea: Idea): FunctionDeclaration[] {
     },
     {
       name: 'showDiagram',
-      description: 'Shows the labelled diagram of a practice question made in this session.',
+      description: 'Shows the labelled diagram of the stuck question (questionId "check") or of a practice question made in this session.',
       parameters: { type: 'object', properties: { questionId: { type: 'string' } }, required: ['questionId'] },
     },
     {
       name: 'giveWorkedSolution',
-      description: 'Shows the step-by-step working of a practice question made in this session.',
+      description:
+        'Shows the step-by-step working of the stuck question (questionId "check") or of a practice question made in this session after the child has answered it.',
       parameters: { type: 'object', properties: { questionId: { type: 'string' } }, required: ['questionId'] },
     },
     {
@@ -355,8 +358,8 @@ export class TutorSession {
         return this.makePractice(args)
       case 'showDiagram':
       case 'giveWorkedSolution': {
-        const question = typeof args.questionId === 'string' ? this.practice.get(args.questionId) : undefined
-        if (!question) return { error: 'No practice question with that questionId was made in this session.' }
+        const question = args.questionId === 'check' ? this.opts.checkQuestion : typeof args.questionId === 'string' ? this.practice.get(args.questionId) : undefined
+        if (!question) return { error: 'Use questionId "check" or the id of a practice question made in this session.' }
         if (name === 'giveWorkedSolution' && question === this.view.awaiting) return { error: 'Wait for the child to answer first.' }
         this.update({ items: [...this.view.items, { kind: name === 'showDiagram' ? 'diagram' : 'steps', question }] })
         return { shown: true }
@@ -379,9 +382,10 @@ export class TutorSession {
     }
     if (this.view.awaiting) return { error: 'Wait for the child to answer the current practice question first.' }
     const newSeed = this.opts.newSeed ?? randomSeed
-    const avoid = this.opts.checkQuestion.answer.value
+    const earlier = [...this.practice.values()].filter((q) => q.templateId === args.templateId)
+    const avoid = new Set([this.opts.checkQuestion.answer.value, ...earlier.map((q) => q.answer.value)])
     let question = generate(args.templateId, args.difficulty as LessonDifficulty, newSeed())
-    for (let i = 0; i < 20 && question.answer.value === avoid; i++) {
+    for (let i = 0; i < 20 && avoid.has(question.answer.value); i++) {
       question = generate(args.templateId, args.difficulty as LessonDifficulty, newSeed())
     }
     const id = `p${this.practice.size + 1}`
