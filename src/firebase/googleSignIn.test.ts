@@ -30,10 +30,10 @@ vi.mock('firebase/auth', () => ({
 vi.mock('firebase/firestore', () => ({
   collection: (_: unknown, ...segments: string[]) => ({ path: segments.join('/') }),
   doc: (parent: Ref, id: string) => ({ path: `${parent.path}/${id}` }),
-  getDoc: async (ref: Ref) => snapshot(ref.path),
-  getDocs: async (ref: Ref) => ({
-    docs: [...docs.keys()].filter((k) => k.startsWith(`${ref.path}/`)).map((k) => snapshot(k)),
-  }),
+  getDocs: async (ref: Ref) => {
+    const found = [...docs.keys()].filter((k) => k.startsWith(`${ref.path}/`)).map((k) => snapshot(k))
+    return { docs: found, empty: found.length === 0 }
+  },
   setDoc: async (ref: Ref, data: unknown) => {
     docs.set(ref.path, structuredClone(data))
   },
@@ -65,14 +65,20 @@ describe('signInWithGoogle', () => {
     expect([...docs.keys()]).toEqual(['users/anon/profiles/riya'])
   })
 
-  it('switches to the existing Google account and copies only the nicknames it does not have', async () => {
+  it("switches to the existing Google account and keeps its child instead of this browser's", async () => {
     linkError = { code: 'auth/credential-already-in-use' }
-    docs.set('users/anon/profiles/riya', { id: 'riya', nickname: 'Riya', from: 'here' })
     docs.set('users/anon/profiles/sam', { id: 'sam', nickname: 'Sam' })
-    docs.set('users/google-user/profiles/riya', { id: 'riya', nickname: 'Riya', from: 'there' })
+    docs.set('users/google-user/profiles/riya', { id: 'riya', nickname: 'Riya' })
 
     expect(await signInWithGoogle(app, firestore)).toBe('switched')
-    expect(docs.get('users/google-user/profiles/riya')).toEqual({ id: 'riya', nickname: 'Riya', from: 'there' })
+    expect([...docs.keys()].filter((k) => k.startsWith('users/google-user/'))).toEqual(['users/google-user/profiles/riya'])
+  })
+
+  it("copies this browser's child when the Google account has none", async () => {
+    linkError = { code: 'auth/credential-already-in-use' }
+    docs.set('users/anon/profiles/sam', { id: 'sam', nickname: 'Sam' })
+
+    expect(await signInWithGoogle(app, firestore)).toBe('switched')
     expect(docs.get('users/google-user/profiles/sam')).toEqual({ id: 'sam', nickname: 'Sam' })
   })
 

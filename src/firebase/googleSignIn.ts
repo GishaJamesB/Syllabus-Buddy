@@ -7,7 +7,7 @@ import {
   signOut,
   type AuthError,
 } from 'firebase/auth'
-import { collection, doc, getDoc, getDocs, setDoc, type Firestore } from 'firebase/firestore'
+import { collection, doc, getDocs, setDoc, type Firestore } from 'firebase/firestore'
 import type { AccountStatus } from './account'
 
 export function accountStatus(app: FirebaseApp): AccountStatus {
@@ -16,12 +16,10 @@ export function accountStatus(app: FirebaseApp): AccountStatus {
   return { signedIn: true, email: user.email }
 }
 
-export async function copyMissingProfiles(firestore: Firestore, toUid: string, profiles: { id: string }[]) {
+export async function copyIfEmpty(firestore: Firestore, toUid: string, profiles: { id: string }[]) {
   const target = collection(firestore, 'users', toUid, 'profiles')
-  for (const profile of profiles) {
-    const ref = doc(target, profile.id)
-    if (!(await getDoc(ref)).exists()) await setDoc(ref, profile)
-  }
+  if (!(await getDocs(target)).empty) return
+  for (const profile of profiles) await setDoc(doc(target, profile.id), profile)
 }
 
 export async function signInWithGoogle(app: FirebaseApp, firestore: Firestore): Promise<'linked' | 'switched'> {
@@ -39,7 +37,7 @@ export async function signInWithGoogle(app: FirebaseApp, firestore: Firestore): 
     const here = await getDocs(collection(firestore, 'users', user.uid, 'profiles'))
     const profiles = here.docs.map((d) => d.data() as { id: string })
     const signedIn = await signInWithCredential(auth, credential)
-    await copyMissingProfiles(firestore, signedIn.user.uid, profiles)
+    await copyIfEmpty(firestore, signedIn.user.uid, profiles)
     return 'switched'
   }
 }
