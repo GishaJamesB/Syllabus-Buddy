@@ -26,15 +26,16 @@ You create every resource yourself. Nothing in this repo creates or changes Fire
 2. Choose your web app, **reCAPTCHA Enterprise**, paste the key ID, save.
 3. Under **APIs**, enforce App Check for **Firebase AI Logic** and for **Cloud Firestore** (do this after step 9 works, so you are not locked out while testing).
 
-## 6. Enable Anonymous Auth
-Firebase console, **Build, Authentication, Sign-in method**, enable **Anonymous**.
+## 6. Enable Anonymous and Google sign-in
+1. Firebase console, **Build, Authentication, Sign-in method**, enable **Anonymous**.
+2. On the same page, **Add new provider**, choose **Google**, pick a support email and save. A grown-up can then use **Sign in with Google** in the **For grown-ups** panel to keep progress across devices. Children never need to sign in.
+3. **Authentication, Settings, Authorized domains** must list `localhost` and your hosted domains. Firebase adds them by default.
 
 ## 7. Create the Cloud Firestore database
 1. Firebase console, **Build, Firestore Database**, **Create database**.
 2. Choose the **Standard** edition (Native mode) and a region close to your learners. The region cannot be changed later.
 3. Start in **production mode**.
-4. Deploy the security rules from this folder (needs the setup in [deploy.md](deploy.md) section 1): `firebase deploy --only firestore:rules`. They let each anonymous user read and write only `users/<uid>/profiles/*` and deny everything else.
-
+4. Deploy the security rules from this folder (needs the setup in [deploy.md](deploy.md) section 1): `firebase deploy --only firestore:rules`. They let each signed-in user, anonymous or Google, read and write only `users/<uid>/profiles/*` and deny everything else.
 ## 8. Prepare `.env.local`
 ```
 cp .env.example .env.local

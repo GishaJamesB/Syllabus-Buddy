@@ -7,6 +7,7 @@ export interface Store {
   addProfile(profile: Profile): Promise<void>
   loadProfile(id: string): Promise<Profile | null>
   saveProfile(profile: Profile): Promise<void>
+  deleteProfile(id: string): Promise<void>
 }
 
 const DB_NAME = 'syllabus-buddy'
@@ -39,6 +40,9 @@ export function memoryStore(): Store {
     async saveProfile(profile) {
       profiles.set(profile.id, structuredClone(profile))
     },
+    async deleteProfile(id) {
+      profiles.delete(id)
+    },
   }
 }
 
@@ -61,6 +65,9 @@ function idbStore(db: IDBPDatabase): Store {
     },
     async saveProfile(profile) {
       await db.put(STORE, profile)
+    },
+    async deleteProfile(id) {
+      await db.delete(STORE, id)
     },
   }
 }

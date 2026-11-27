@@ -1,5 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import type { BuddyService } from '../ai/useBuddy'
+import type { AccountService } from '../firebase/account'
+import { AccountSection } from './AccountSection'
 import { BrainStatus } from './BrainStatus'
 import { checkNickname, type Profile } from './progress'
 import { bigBtn, card, field } from './styles'
@@ -9,9 +11,10 @@ interface Props {
   onPick: (profile: Profile) => void
   onAdd: (nickname: string, id: string) => Promise<string | null>
   buddy: BuddyService
+  account: AccountService
 }
 
-export function NicknameScreen({ profiles, onPick, onAdd, buddy }: Props) {
+export function NicknameScreen({ profiles, onPick, onAdd, buddy, account }: Props) {
   const [name, setName] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -87,6 +90,8 @@ export function NicknameScreen({ profiles, onPick, onAdd, buddy }: Props) {
       </form>
 
       <BrainStatus buddy={buddy} />
+
+      <AccountSection account={account} heading="For grown-ups" className={card} />
     </div>
   )
 }

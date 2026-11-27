@@ -88,7 +88,9 @@ export async function initFirebase(config: AppConfig): Promise<FirebaseServices>
 
   await getToken(appCheck)
 
-  const cred = await signInAnonymously(getAuth(app))
+  const auth = getAuth(app)
+  await auth.authStateReady()
+  const user = auth.currentUser ?? (await signInAnonymously(auth)).user
 
   const firestore = openFirestore(app)
 
@@ -158,5 +160,5 @@ export async function initFirebase(config: AppConfig): Promise<FirebaseServices>
       },
     })
 
-  return { app, uid: cred.user.uid, firestore, tuning, createTurnModel, createAuthorModel, createTutorModel, createSummaryModel }
+  return { app, uid: user.uid, firestore, tuning, createTurnModel, createAuthorModel, createTutorModel, createSummaryModel }
 }

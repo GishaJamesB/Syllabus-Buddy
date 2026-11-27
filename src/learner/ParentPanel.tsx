@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { brainRow, useBrainStatus, type BuddyService } from '../ai/useBuddy'
 import type { Lesson } from '../content/lessonSchema'
+import type { AccountService } from '../firebase/account'
+import { AccountSection } from './AccountSection'
 import { parentSummary, writeSummary } from './parentSummary'
 import type { Profile } from './progress'
 import { card, softBtn } from './styles'
@@ -9,7 +11,23 @@ interface Props {
   profile: Profile
   lesson: Lesson
   buddy: BuddyService
+  account: AccountService
   onClose: () => void
+  onDelete: () => void
+}
+
+function DeleteSection({ nickname, onDelete }: { nickname: string; onDelete: () => void }) {
+  function confirmDelete() {
+    if (window.confirm(`Delete all of ${nickname}'s progress? This can't be undone.`)) onDelete()
+  }
+  return (
+    <div>
+      <h3 className="text-xl font-extrabold">Delete data</h3>
+      <button type="button" className={`${softBtn} mt-2`} onClick={confirmDelete}>
+        Delete {nickname}'s data
+      </button>
+    </div>
+  )
 }
 
 export const NO_NANO_NOTE = 'A written summary needs on-device AI in Chrome.'
@@ -17,7 +35,7 @@ export const SUMMARY_FAILED = "Couldn't write a summary this time."
 
 type Paragraph = { kind: 'writing' } | { kind: 'done'; text: string } | { kind: 'failed' } | { kind: 'none' }
 
-export function ParentPanel({ profile, lesson, buddy, onClose }: Props) {
+export function ParentPanel({ profile, lesson, buddy, account, onClose, onDelete }: Props) {
   const heading = useRef<HTMLHeadingElement>(null)
   const brain = useBrainStatus(buddy)
   const onDevice = brainRow(brain).kind === 'device'
@@ -104,6 +122,9 @@ export function ParentPanel({ profile, lesson, buddy, onClose }: Props) {
         {paragraph.kind === 'failed' && <p className="text-sm">{SUMMARY_FAILED}</p>}
         {paragraph.kind === 'none' && summary.mistakes.length > 0 && <p className="text-sm">{NO_NANO_NOTE}</p>}
       </div>
+
+      <AccountSection account={account} heading="Keep progress" />
+      <DeleteSection nickname={profile.nickname} onDelete={onDelete} />
     </section>
   )
 }

@@ -39,6 +39,7 @@ import {
   type Profile,
   type Progress,
 } from './progress'
+import { firebaseAccount, type AccountService } from '../firebase/account'
 import { openLearnerStore } from './defaultOpen'
 import { memoryStore, NicknameTakenError, type Store } from './store'
 import { smallBtn } from './styles'
@@ -68,6 +69,7 @@ interface Props {
   lessonData?: unknown
   open?: () => Promise<Store>
   buddy?: BuddyService
+  account?: AccountService
   now?: () => number
   random?: () => number
 }
@@ -78,6 +80,7 @@ type View =
   | { kind: 'results'; testId: string }
 
 const defaultOpen = () => openLearnerStore()
+const defaultAccount = firebaseAccount()
 
 function buddyTurnFor(context: TurnContext, request: BuddyRequest, reply: BuddyReply): Omit<BuddyTurn, 'at'> {
   const miss = request.kind === 'miss' ? request.turn.result : null
@@ -100,6 +103,7 @@ export default function LearnerApp({
   lessonData = lessonJson,
   open = defaultOpen,
   buddy = firebaseBuddy(),
+  account = defaultAccount,
   now = Date.now,
   random = Math.random,
 }: Props) {
@@ -224,6 +228,20 @@ export default function LearnerApp({
     return null
   }
 
+  async function deleteLearner(id: string) {
+    turns.clear()
+    setGrownUps(false)
+    setTutorRunning(false)
+    setView({ kind: 'lesson' })
+    show(null)
+    setProfiles((list) => (list ?? []).filter((p) => p.id !== id))
+    try {
+      await activeStore.deleteProfile(id)
+    } catch {
+      setSaveFailed(true)
+    }
+  }
+
   const banner = !store.persistent || saveFailed
 
   function openTest() {
@@ -272,7 +290,7 @@ export default function LearnerApp({
 
   let body
   if (!profile) {
-    body = <NicknameScreen profiles={profiles} onPick={pick} onAdd={add} buddy={buddy} />
+    body = <NicknameScreen profiles={profiles} onPick={pick} onAdd={add} buddy={buddy} account={account} />
   } else if (view.kind === 'test' && view.running && openRecord) {
     body = <TestScreen key={openRecord.id} test={openRecord} now={now} onAnswer={answerQuestion} onFinish={finishTest} />
   } else if (view.kind === 'test') {
@@ -376,10 +394,11 @@ export default function LearnerApp({
       <TuningContext.Provider value={tuning}>
         <div className="space-y-5">
           {grownUps && profile && (
-            <ParentPanel key={profile.id} profile={profile} lesson={lesson} buddy={buddy} onClose={() => {
+            <ParentPanel key={profile.id} profile={profile} lesson={lesson} buddy={buddy} account={account} onClose={() => {
                 setGrownUps(false)
                 grownUpsButton.current?.focus()
               }}
+              onDelete={() => void deleteLearner(profile.id)}
             />
           )}
           {body}

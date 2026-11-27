@@ -37,6 +37,12 @@ vi.mock('firebase/remote-config', () => ({
 }))
 
 const models: { params: Record<string, unknown> }[] = []
+const auth = {
+  currentUser: null as { uid: string } | null,
+  authStateReady: async () => {
+    calls.push('authStateReady')
+  },
+}
 
 vi.mock('firebase/app', () => ({ initializeApp: () => ({ name: 'app' }) }))
 vi.mock('firebase/app-check', () => ({
@@ -48,7 +54,7 @@ vi.mock('firebase/app-check', () => ({
   ReCaptchaEnterpriseProvider: class {},
 }))
 vi.mock('firebase/auth', () => ({
-  getAuth: () => ({}),
+  getAuth: () => auth,
   signInAnonymously: async () => {
     calls.push('signIn')
     return { user: { uid: 'u1' } }
@@ -151,7 +157,7 @@ describe('initFirebase', () => {
   it('loads tuning after sign-in and builds the turn model with the remote cloud mode', async () => {
     remote = { inference_mode: 'only_in_cloud' }
     const services = await initFirebase(config)
-    expect(calls.slice(0, 3)).toEqual(['getToken', 'signIn', 'isSupported'])
+    expect(calls.slice(0, 4)).toEqual(['getToken', 'authStateReady', 'signIn', 'isSupported'])
     expect(services.tuning.values.inference_mode).toBe('only_in_cloud')
     services.createTurnModel()
     expect(models[0].params.mode).toBe('only_in_cloud')
@@ -161,6 +167,14 @@ describe('initFirebase', () => {
     await vi.waitFor(() => expect(service.status().phase).toBe('ready'))
     expect(brainRow(service.status()).kind).toBe('cloud')
     expect(service.tuning().inference_mode).toBe('only_in_cloud')
+  })
+
+  it('keeps a user who is already signed in instead of signing in anonymously', async () => {
+    auth.currentUser = { uid: 'google-user' }
+    const services = await initFirebase(config)
+    expect(services.uid).toBe('google-user')
+    expect(calls).not.toContain('signIn')
+    auth.currentUser = null
   })
 
   it('returns the Firestore instance', async () => {

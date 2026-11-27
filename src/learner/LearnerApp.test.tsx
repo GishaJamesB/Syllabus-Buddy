@@ -7,6 +7,7 @@ import type { OnDeviceStatus } from '../ai/onDeviceStatus'
 import { createBuddyService, type BuddyService } from '../ai/useBuddy'
 import lessonJson from '../content/ch6.lesson.json'
 import type { InferenceModeValue } from '../firebase/config'
+import type { AccountService, AccountStatus } from '../firebase/account'
 import type { Idea, Lesson } from '../content/lessonSchema'
 import { generate } from '../maths/registry'
 import { formatAnswer, type Question } from '../maths/types'
@@ -1322,5 +1323,86 @@ describe('For grown-ups', () => {
     expect(await panel.findByText('Summary 2.')).toBeTruthy()
     expect(buddy.summaryPrompts).toHaveLength(2)
     expect(buddy.summaryPrompts[1]).not.toBe(buddy.summaryPrompts[0])
+  })
+})
+
+describe('Keep progress and delete data', () => {
+  afterEach(() => vi.restoreAllMocks())
+
+  function fakeAccount(status: AccountStatus | Error, failSignIn = false) {
+    const signIn = vi.fn(() => (failSignIn ? Promise.reject(new Error('popup closed')) : Promise.resolve()))
+    const signOut = vi.fn(async () => {})
+    const service: AccountService = {
+      status: () => (status instanceof Error ? Promise.reject(status) : Promise.resolve(status)),
+      signIn,
+      signOut,
+    }
+    return { service, signIn, signOut }
+  }
+
+  async function openGrownUps(account: AccountService, open = dbOpener()) {
+    render(<LearnerApp open={open} lessonData={lessonJson} buddy={restingBuddy()} account={account} />)
+    await screen.findByText("Who's learning?")
+    await addNickname('Riya')
+    await screen.findByText('Idea 1 of 7')
+    fireEvent.click(screen.getByRole('button', { name: 'For grown-ups' }))
+    return within(screen.getByRole('region', { name: 'For grown-ups' }))
+  }
+
+  it('offers Google sign-in when the browser is anonymous', async () => {
+    const account = fakeAccount({ signedIn: false })
+    const panel = await openGrownUps(account.service)
+    fireEvent.click(await panel.findByRole('button', { name: 'Sign in with Google' }))
+    expect(account.signIn).toHaveBeenCalledTimes(1)
+    expect(panel.getByText('One moment…')).toBeTruthy()
+  })
+
+  it('says where progress is saved and offers sign-out when signed in', async () => {
+    const account = fakeAccount({ signedIn: true, email: 'parent@example.com' })
+    const panel = await openGrownUps(account.service)
+    expect(await panel.findByText('Progress is saved to parent@example.com.')).toBeTruthy()
+    fireEvent.click(panel.getByRole('button', { name: 'Sign out' }))
+    expect(account.signOut).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows a message when sign-in fails', async () => {
+    const account = fakeAccount({ signedIn: false }, true)
+    const panel = await openGrownUps(account.service)
+    fireEvent.click(await panel.findByRole('button', { name: 'Sign in with Google' }))
+    expect(await panel.findByText("Sign-in didn't work. Reload the page and try again.")).toBeTruthy()
+  })
+
+  it('offers Google sign-in on the start screen before any nickname exists', async () => {
+    const account = fakeAccount({ signedIn: false })
+    render(<LearnerApp open={dbOpener()} lessonData={lessonJson} buddy={restingBuddy()} account={account.service} />)
+    await screen.findByText("Who's learning?")
+    fireEvent.click(await screen.findByRole('button', { name: 'Sign in with Google' }))
+    expect(account.signIn).toHaveBeenCalledTimes(1)
+  })
+
+  it('hides the sign-in section when the account cannot be read', async () => {
+    const panel = await openGrownUps(fakeAccount(new Error('offline')).service)
+    await act(async () => {})
+    expect(panel.queryByText('Keep progress')).toBeNull()
+  })
+
+  it('deletes the learner after confirming and returns to the nickname screen', async () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const open = dbOpener()
+    const panel = await openGrownUps(fakeAccount({ signedIn: false }).service, open)
+    fireEvent.click(panel.getByRole('button', { name: "Delete Riya's data" }))
+    expect(confirm).toHaveBeenCalledWith("Delete all of Riya's progress? This can't be undone.")
+    await screen.findByLabelText('Add a nickname')
+    expect(screen.queryByRole('button', { name: 'Riya' })).toBeNull()
+    expect(await (await open()).listProfiles()).toEqual([])
+  })
+
+  it('keeps the learner when the grown-up cancels', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(false)
+    const open = dbOpener()
+    const panel = await openGrownUps(fakeAccount({ signedIn: false }).service, open)
+    fireEvent.click(panel.getByRole('button', { name: "Delete Riya's data" }))
+    expect(screen.getByText('Idea 1 of 7')).toBeTruthy()
+    expect(await (await open()).listProfiles()).toHaveLength(1)
   })
 })

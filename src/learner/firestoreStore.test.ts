@@ -21,6 +21,9 @@ vi.mock('firebase/firestore', () => ({
   setDoc: async (ref: Ref, data: unknown) => {
     docs.set(ref.path, structuredClone(data))
   },
+  deleteDoc: async (ref: Ref) => {
+    docs.delete(ref.path)
+  },
 }))
 
 const { firestoreStore } = await import('./firestoreStore')
@@ -59,6 +62,14 @@ describe('firestoreStore', () => {
     await store.addProfile(riya)
     await store.saveProfile({ ...riya, progress: goTo(riya.progress, 'idea-4', 2) })
     expect((await store.loadProfile('riya'))?.progress.currentIdeaId).toBe('idea-4')
+  })
+
+  it('deletes a profile', async () => {
+    const store = firestoreStore(db, 'u1')
+    await store.addProfile(newProfile('Riya', 'riya', lesson, 1))
+    await store.deleteProfile('riya')
+    expect(await store.loadProfile('riya')).toBeNull()
+    expect(docs.size).toBe(0)
   })
 
   it('lists the most recently updated profile first and only the current user', async () => {

@@ -21,6 +21,15 @@ describe('store', () => {
     expect((await store.listProfiles()).map((p) => p.nickname)).toEqual(['Riya'])
   })
 
+  it('deletes a profile in IndexedDB and in memory', async () => {
+    for (const store of [await freshDb(), memoryStore()]) {
+      await store.addProfile(newProfile('Riya', 'riya', lesson, 1))
+      await store.deleteProfile('riya')
+      expect(await store.loadProfile('riya')).toBeNull()
+      expect(await store.listProfiles()).toEqual([])
+    }
+  })
+
   it('persists across reopening the same database', async () => {
     const name = `test-db-${++n}`
     const first = await openStore(name)

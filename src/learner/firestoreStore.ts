@@ -1,4 +1,4 @@
-import { collection, doc, getDoc, getDocs, setDoc, type Firestore } from 'firebase/firestore'
+import { collection, deleteDoc, doc, getDoc, getDocs, setDoc, type Firestore } from 'firebase/firestore'
 import type { Profile } from './progress'
 import { byRecent, NicknameTakenError, type Store } from './store'
 
@@ -21,6 +21,9 @@ export function firestoreStore(db: Firestore, uid: string): Store {
     },
     async saveProfile(profile) {
       await setDoc(doc(profiles, profile.id), profile)
+    },
+    async deleteProfile(id) {
+      await deleteDoc(doc(profiles, id))
     },
   }
 }

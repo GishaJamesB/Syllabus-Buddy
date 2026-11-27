@@ -70,5 +70,6 @@ Run it in Chrome twice: once in a profile with Gemini Nano ready, and once in a 
 - [ ] **Test:** start a test, answer a few questions, finish it, and check that each wrong answer shows a correction.
 - [ ] **Test history:** reload, pick the same nickname, and check the finished test is still in the history.
 - [ ] **Grown-ups panel:** open **For grown-ups** and check the mistake summary shows.
-- [ ] **Diagnostics:** `/diagnostics` shows sign-in, App Check, on-device status, inference mode and the Tuning table. There is no Run box.
+- [ ] **Sign in with Google:** in **For grown-ups**, click **Sign in with Google**. After the page reloads, the same nicknames and progress are still there and the panel shows the Google email. Open the live URL on another computer, sign in with the same Google account, and check the nicknames appear.
+- [ ] **Delete data:** add a throwaway nickname, open **For grown-ups**, click **Delete <nickname>'s data** and confirm. The nickname screen no longer lists it, and the document is gone from Firestore.- [ ] **Diagnostics:** `/diagnostics` shows sign-in, App Check, on-device status, inference mode and the Tuning table. There is no Run box.
 - [ ] **Author:** `/author` shows the learner app, not author mode.
