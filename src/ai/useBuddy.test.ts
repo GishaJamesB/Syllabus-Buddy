@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { InferenceModeValue } from '../firebase/config'
 import type { OnDeviceStatus } from './onDeviceStatus'
 import { DEFAULT_TUNING } from '../config/tuning'
-import { brainRow, createBuddyService, oneAtATime, usesCloud, type BrainStatus, type BuddyBackend } from './useBuddy'
+import { backendFrom, brainRow, createBuddyService, usesCloud, type BrainStatus, type BuddyBackend } from './useBuddy'
 
 const ready = (mode: InferenceModeValue, nano: OnDeviceStatus, download: number | null = null): BrainStatus => ({
   phase: 'ready',
@@ -122,26 +122,20 @@ describe('warm-up', () => {
   })
 })
 
-describe('oneAtATime', () => {
-  it('starts the next prompt only after the previous one settles, even if it failed', async () => {
-    const order: string[] = []
-    let failFirst!: (e: Error) => void
-    const generateContent = vi.fn((prompt: string) => {
-      order.push(`start ${prompt}`)
-      if (prompt === 'a') return new Promise<never>((_, reject) => (failFirst = reject))
-      return Promise.resolve({ response: { text: () => prompt } })
-    })
-    const model = oneAtATime({ generateContent })
+describe('backendFrom', () => {
+  it('reuses one turn model and never makes a prompt wait for an earlier one that hangs', async () => {
+    const generateContent = vi.fn((prompt: string) =>
+      prompt === 'hang' ? new Promise<never>(() => {}) : Promise.resolve({ response: { text: () => prompt } }),
+    )
+    const createTurnModel = vi.fn(() => ({ generateContent }))
+    const services = { tuning: { values: DEFAULT_TUNING }, createTurnModel, createTutorModel: vi.fn(), createSummaryModel: vi.fn() }
+    const backend = backendFrom(services as never, { tutorModel: 'tutor' })
 
-    const a = model.generateContent('a')
-    const b = model.generateContent('b')
-    await Promise.resolve()
-    expect(order).toEqual(['start a'])
-
-    failFirst(new Error('boom'))
-    await expect(a).rejects.toThrow('boom')
-    await expect(b).resolves.toMatchObject({ response: {} })
-    expect(order).toEqual(['start a', 'start b'])
+    const model = backend.createTurnModel()
+    expect(backend.createTurnModel()).toBe(model)
+    void model.generateContent('hang')
+    await expect(model.generateContent('next')).resolves.toMatchObject({ response: {} })
+    expect(createTurnModel).toHaveBeenCalledTimes(1)
   })
 })
 

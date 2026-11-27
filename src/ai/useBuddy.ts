@@ -132,7 +132,7 @@ export function backendFrom(
   config: Pick<AppConfig, 'tutorModel'>,
 ): BuddyBackend {
   let turnModel: DeviceTurnModel | null = null
-  const sharedTurnModel = () => (turnModel ??= oneAtATime(services.createTurnModel()))
+  const sharedTurnModel = () => (turnModel ??= services.createTurnModel())
   return {
     mode: services.tuning.values.inference_mode,
     tuning: services.tuning.values,
@@ -146,21 +146,10 @@ export function backendFrom(
   }
 }
 
+// The Firebase SDK keeps Nano loaded only while one model object holds its last on-device session,
+// so every Buddy turn reuses the same model. A new prompt replaces any prompt still running, which
+// is what we want because only the reply to the child's latest answer is shown.
 const WARM_UP_PROMPT = 'Reply with this JSON only: {"intent": "off_topic", "misconception": null, "clue": null}'
-
-// The Firebase SDK keeps Nano loaded only while one model object holds its last on-device session.
-// Each new prompt on that object replaces the session, so prompts must run one at a time.
-export function oneAtATime(model: DeviceTurnModel): DeviceTurnModel {
-  let queue: Promise<unknown> = Promise.resolve()
-  return {
-    generateContent(prompt) {
-      const run = queue.then(() => model.generateContent(prompt))
-      queue = run.catch(() => {})
-      return run
-    },
-    initializeDeviceModel: model.initializeDeviceModel && ((onProgress) => model.initializeDeviceModel!(onProgress)),
-  }
-}
 
 let shared: BuddyService | null = null
 
