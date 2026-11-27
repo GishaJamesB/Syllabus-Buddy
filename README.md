@@ -6,21 +6,20 @@ A private, on-device-first maths tutor for one NCERT chapter: *Ganita Prakash* G
 
 Syllabus Buddy teaches a 12-year-old one idea at a time, checks each idea with a question, and helps when the child gets stuck. When Gemini Nano is ready in Chrome, quick help runs on the child's own computer, so it is fast, free, works offline and keeps the child's words on the device. On a computer without Nano, quick help falls back to the cloud and sends the child's answer or question (see [Privacy](#privacy)). When the child is really stuck, a cloud tutor takes over, and it gets an anonymised summary of the mistakes, never what the child typed.
 
-Privacy is the reason the app is hybrid. The child uses a nickname and never logs in. Progress is tied to the browser's anonymous account, unless a grown-up chooses to sign in with Google to keep it across devices.
+Privacy is the reason the app is hybrid. The child uses a nickname and never logs in. Progress is tied to the browser's anonymous account, unless a parent chooses to sign in with Google to keep it across devices.
 
 ## Features
 
 - **Guided lesson.** Seven ideas in book order, each with key points, a worked example and a labelled diagram. **Next** unlocks only after a correct answer; **Back** always works.
 - **Fresh numbers.** Every question, answer key, worked step and diagram label is made by code from templates, so the numbers always match. The AI never invents numbers.
 - **Buddy.** A wrong answer gets a short clue. The child can also type a question with **Ask Buddy**. Each reply carries a 🔒 (on-device) or ☁️ (cloud) badge.
-- **Tutor agent.** After 3 misses on an idea (tunable), a cloud agent picks its own tools (diagram, practice question, worked solution, navigation) until the child gets it right or runs out of turns. A "What the AI did" panel shows the exact summary it was sent and every tool call in order.
+- **Tutor agent.** After 2 misses on a question (tunable), a cloud agent explains the question first, then picks its own tools (diagram, practice question, worked solution, navigation) until the child gets it right or runs out of turns. If the child is still stuck after a session, **Ask the Tutor again** starts a new one. A "What the AI did" panel shows the exact summary it was sent and every tool call in order.
 - **Weak-spot test.** 10 questions with new numbers each time, weighted toward the child's mistakes, with a timer per question difficulty. Wrong answers show the correct answer, worked steps and a **Why?** button.
 - **Buddy's brain status.** The start screen shows whether Buddy is on-device, downloading, or using the cloud, with a **Get on-device Buddy** button when Nano can be downloaded.
-- **Nicknames and saved progress.** Several children can share a device. Progress, mistakes and test history are saved in Cloud Firestore under the browser's anonymous account, with IndexedDB as a fallback when Firebase is unavailable.
-- **Keep progress across devices.** In **For grown-ups**, a grown-up can sign in with Google. The browser's anonymous account is linked to Google, so all progress is kept and the same nicknames appear on any computer signed in to that Google account.
-- **Delete data.** **For grown-ups** has a button to delete a child's data.
+- **Nickname and saved progress.** One child per browser. The child picks a nickname on the first visit, and after that the app opens straight into their lesson. Progress, mistakes and test history are saved in Cloud Firestore under the browser's anonymous account, with IndexedDB as a fallback when Firebase is unavailable.
+- **Keep progress across devices.** In **For parents**, on the start screen or in the panel, a parent can sign in with Google. The browser's anonymous account is linked to Google, so all progress is kept and the child's progress opens on any computer signed in to that Google account. If that Google account already has a child, that child's progress is used; otherwise the child from this browser is copied across.- **Delete data.** **For parents** has a button to delete a child's data.
 - **Read aloud.** A speaker button reads the lesson and clues with the browser's built-in speech.
-- **For grown-ups.** A panel lists the child's most common mistakes in plain language and recent test scores, with a short note written on-device when Nano is available.
+- **For parents.** A panel lists the child's most common mistakes in plain language, every answer they have given, newest first, with the date, the question and what went wrong (10 at first, then 20 more at a time), and every finished test with its date, score and each question with the child's answer, with a short note written on-device when Nano is available.
 - **Remote tuning.** Turn limits, the help threshold, test timers and the inference mode can be changed in Remote Config without a redeploy.
 
 ## How hybrid AI is used
@@ -71,10 +70,10 @@ flowchart LR
 ## Privacy
 
 - **Saved progress:** the nickname, progress, saved mistake history and test scores are stored in Cloud Firestore under the browser's account. The security rules let only that account read or write them. Without a Google sign-in, they are tied to this one browser. If Firebase is unavailable, the app falls back to IndexedDB on the device.
-- **Deleting data:** a grown-up can delete a child's data from **For grown-ups**. It is removed from Firestore, or from the browser's storage when Firebase is unavailable.
+- **Deleting data:** a parent can delete a child's data from **For parents**. It is removed from Firestore, or from the browser's storage when Firebase is unavailable.
 - **The tutor agent** gets only the anonymised summary shown in its panel (idea title and key points, template, difficulty, miss count, mistake codes, history counts, max turns), plus each practice question's prompt and whether it was right, with the reason and mistake code. It never gets the child's typed text or nickname.
 - **Buddy turns** (clues after a miss, Ask Buddy and the test's **Why?**) run on Gemini Nano when it is available, so the child's answer and Ask Buddy text stay on the device. On a device without Nano, Buddy falls back to the cloud and sends that text, including the saved test answer for **Why?**. This is a deliberate owner decision, so that every child gets help. Set `inference_mode` to `only_on_device` to turn the fallback off.
-- **Sign-in** is Anonymous Auth by default, with no names, emails or logins for children. A grown-up may optionally sign in with Google to keep progress across devices; the app then knows that Google account's email and shows it only in **For grown-ups**.
+- **Sign-in** is Anonymous Auth by default, with no names, emails or logins for children. A parent may optionally sign in with Google to keep progress across devices; the app then knows that Google account's email and shows it only in **For parents**.
 
 ## Enable Gemini Nano in Chrome
 

@@ -23,7 +23,7 @@ The keys are optional, and the app uses safe defaults without them. The demo's m
 | Key | Value |
 |---|---|
 | `max_turns` | 5 |
-| `misses_before_help` | 3 |
+| `misses_before_help` | 2 |
 | `test_seconds_easy` | 90 |
 | `test_seconds_medium` | 120 |
 | `test_seconds_hard` | 150 |
@@ -59,17 +59,18 @@ When you no longer develop locally, open Firebase console, **App Check, Apps**, 
 Run it in Chrome twice: once in a profile with Gemini Nano ready, and once in a profile or machine without Nano. The no-Nano pass expects `inference_mode` to be `prefer_on_device`, so Buddy falls back to the cloud. Every item should pass both times unless it says otherwise.
 
 - [ ] **Load:** the live URL opens the start screen with no error.
-- [ ] **Nickname:** add a nickname and start learning. Reload and check that the same nickname is still listed.
+- [ ] **Nickname:** add a nickname and start learning. Reload and check that the app opens straight into the same child's lesson.
 - [ ] **Progress in Firestore:** after adding a nickname and answering a question, reload and check the progress is still there. In the Firebase console, **Firestore Database, Data**, check the profile appears under `users/<uid>/profiles`.
 - [ ] **Pass idea 1:** answer idea 1's check question correctly, and **Next** unlocks.
 - [ ] **Buddy clue badge:** give a wrong answer. Buddy's clue shows 🔒 with Nano, or ☁️ without it.
 - [ ] **No AI request on-device (Nano pass only):** open DevTools, **Network**, then give a wrong answer. Buddy's 🔒 clue appears and no request goes to the AI Logic endpoint (`firebasevertexai.googleapis.com`).
 - [ ] **Read aloud:** click a speaker button and hear the idea read out.
 - [ ] **Get on-device Buddy (Nano pass, before the model is downloaded):** the start screen offers **Get on-device Buddy**, and clicking it shows download progress.
-- [ ] **Tutor:** miss the same question `misses_before_help` times (3 by default). The tutor card opens, shows the anonymised summary, lists its tool calls in "What the AI did" and ends with a correct answer or worked steps.
+- [ ] **Tutor:** miss the same question `misses_before_help` times (2 by default). The tutor card opens, shows the anonymised summary, lists its tool calls in "What the AI did" and ends with a correct answer or worked steps.
 - [ ] **Test:** start a test, answer a few questions, finish it, and check that each wrong answer shows a correction.
-- [ ] **Test history:** reload, pick the same nickname, and check the finished test is still in the history.
-- [ ] **Grown-ups panel:** open **For grown-ups** and check the mistake summary shows.
-- [ ] **Sign in with Google:** in **For grown-ups**, click **Sign in with Google**. After the page reloads, the same nicknames and progress are still there and the panel shows the Google email. Open the live URL on another computer, sign in with the same Google account, and check the nicknames appear.
-- [ ] **Delete data:** add a throwaway nickname, open **For grown-ups**, click **Delete <nickname>'s data** and confirm. The nickname screen no longer lists it, and the document is gone from Firestore.- [ ] **Diagnostics:** `/diagnostics` shows sign-in, App Check, on-device status, inference mode and the Tuning table. There is no Run box.
+- [ ] **Test history:** reload and check the finished test is still in the history.
+- [ ] **Parents panel:** open **For parents** and check the mistake summary shows, and **Recent answers** lists the last questions with the child's answers.
+- [ ] **Sign in with Google:** in **For parents**, click **Sign in with Google**. After the page reloads, the same child and progress are still there and the panel shows the Google email. Open the live URL on another computer, sign in with the same Google account from the start screen, and check the child's progress opens.
+- [ ] **Delete data:** open **For parents**, click **Delete <nickname>'s data** and confirm. The app goes back to **Add a nickname**, and the document is gone from Firestore.
+- [ ] **Diagnostics:** `/diagnostics` shows sign-in, App Check, on-device status, inference mode and the Tuning table. There is no Run box.
 - [ ] **Author:** `/author` shows the learner app, not author mode.

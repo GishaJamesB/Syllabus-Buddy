@@ -28,7 +28,7 @@ You create every resource yourself. Nothing in this repo creates or changes Fire
 
 ## 6. Enable Anonymous and Google sign-in
 1. Firebase console, **Build, Authentication, Sign-in method**, enable **Anonymous**.
-2. On the same page, **Add new provider**, choose **Google**, pick a support email and save. A grown-up can then use **Sign in with Google** in the **For grown-ups** panel to keep progress across devices. Children never need to sign in.
+2. On the same page, **Add new provider**, choose **Google**, pick a support email and save. A parent can then use **Sign in with Google** under **For parents** to keep progress across devices. Children never need to sign in.
 3. **Authentication, Settings, Authorized domains** must list `localhost` and your hosted domains. Firebase adds them by default.
 
 ## 7. Create the Cloud Firestore database
@@ -63,7 +63,7 @@ The app works without this step; every value below has a safe default in code. R
    | Key | Type | Default in code | Allowed |
    |---|---|---|---|
    | `max_turns` | Number | 5 | 2 to 10 |
-   | `misses_before_help` | Number | 3 | 1 to 6 |
+   | `misses_before_help` | Number | 2 | 1 to 6 |
    | `test_seconds_easy` | Number | 90 | 30 to 600 |
    | `test_seconds_medium` | Number | 120 | 30 to 600 |
    | `test_seconds_hard` | Number | 150 | 30 to 600 |
