@@ -71,7 +71,7 @@ export function IdeaScreen({
   const justPassed = useRef(false)
   const [feedback, setFeedback] = useState<{ seed: number; value: Feedback } | null>(null)
   const [celebrate, setCelebrate] = useState(0)
-  const [tutorRun, setTutorRun] = useState<{ seed: number; failed: boolean } | null>(null)
+  const [tutorRun, setTutorRun] = useState<{ seed: number; failed: boolean; run: number } | null>(null)
   const [tutorEndedSeed, setTutorEndedSeed] = useState<number | null>(null)
 
   const worked = useMemo(() => workedExample(idea), [idea])
@@ -110,6 +110,11 @@ export function IdeaScreen({
     }
   }, [passed])
 
+  function startTutor() {
+    setTutorEndedSeed(null)
+    setTutorRun((r) => ({ seed: questionSeed, failed: false, run: (r?.run ?? 0) + 1 }))
+  }
+
   function submit(input: { text: string; unit: Unit | null }) {
     const result = grade(question, input)
     setFeedback({ seed: questionSeed, value: feedbackFor(result, question) })
@@ -126,7 +131,7 @@ export function IdeaScreen({
       !tutorRunning &&
       !hasTutorSession(progress, idea.id, questionSeed)
     ) {
-      setTutorRun({ seed: questionSeed, failed: false })
+      startTutor()
     }
     onAnswer(input, result, question)
   }
@@ -245,7 +250,7 @@ export function IdeaScreen({
 
         {tutorOn && tutorHooks && (
           <TutorCard
-            key={questionSeed}
+            key={`${questionSeed}-${tutorRun.run}`}
             hooks={tutorHooks}
             brain={brain}
             idea={idea}
@@ -258,14 +263,14 @@ export function IdeaScreen({
             onNewQuestion={onNewQuestion}
             onEnd={(outcome) => {
               setTutorEndedSeed(questionSeed)
-              if (outcome === 'failed') setTutorRun({ seed: questionSeed, failed: true })
+              if (outcome === 'failed') setTutorRun((r) => ({ seed: questionSeed, failed: true, run: r?.run ?? 0 }))
             }}
           />
         )}
 
-        {tutor && !tutorOn && !passed && !stepsShown && stuck && !hasTutorSession(progress, idea.id, questionSeed) && (
-          <button type="button" className={softBtn} onClick={() => setTutorRun({ seed: questionSeed, failed: false })}>
-            Ask the Tutor
+        {tutor && stuck && !tutorRunning && (passed || !stepsShown) && (
+          <button type="button" className={softBtn} onClick={startTutor}>
+            {tutorOn || hasTutorSession(progress, idea.id, questionSeed) ? 'Ask the Tutor again' : 'Ask the Tutor'}
           </button>
         )}
 

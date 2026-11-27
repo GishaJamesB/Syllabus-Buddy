@@ -15,11 +15,14 @@ export function AnswerBox({ question, answered, onSubmit, submitLabel = 'Check m
   const dollars = question.answer.unit === 'S$'
   const [text, setText] = useState(answered?.text ?? '')
   const [unit, setUnit] = useState<Unit | null>(answered?.unit ?? null)
+  const [checked, setChecked] = useState(false)
   const locked = answered !== null
+  const canCheck = !locked && !checked && text.trim() !== ''
 
   function submit(e: FormEvent) {
     e.preventDefault()
-    if (locked) return
+    if (!canCheck) return
+    setChecked(true)
     onSubmit({ text, unit: dollars ? 'S$' : unit })
   }
 
@@ -41,7 +44,10 @@ export function AnswerBox({ question, answered, onSubmit, submitLabel = 'Check m
           autoComplete="off"
           value={text}
           readOnly={locked}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => {
+            setText(e.target.value)
+            setChecked(false)
+          }}
           className="w-full max-w-48 rounded-xl border-2 border-purple/40 bg-white px-4 py-3 text-2xl font-bold focus:border-purple focus:outline-none read-only:bg-teal-soft"
         />
       </div>
@@ -55,7 +61,10 @@ export function AnswerBox({ question, answered, onSubmit, submitLabel = 'Check m
                 type="button"
                 aria-pressed={unit === u}
                 disabled={locked}
-                onClick={() => setUnit(unit === u ? null : u)}
+                onClick={() => {
+                  setUnit(unit === u ? null : u)
+                  setChecked(false)
+                }}
                 className={`min-w-20 rounded-full border-2 px-5 py-3 text-lg font-extrabold focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-purple ${
                   unit === u ? 'border-purple bg-purple text-white' : 'border-purple/40 bg-white text-purple hover:bg-purple-soft'
                 } disabled:cursor-not-allowed`}
@@ -67,7 +76,7 @@ export function AnswerBox({ question, answered, onSubmit, submitLabel = 'Check m
         </fieldset>
       )}
       {!locked && (
-        <button type="submit" className={bigBtn}>
+        <button type="submit" className={bigBtn} disabled={!canCheck}>
           {submitLabel}
         </button>
       )}

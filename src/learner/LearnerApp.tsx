@@ -392,17 +392,15 @@ export default function LearnerApp({
       credit={lesson.source.credit}
     >
       <TuningContext.Provider value={tuning}>
-        <div className="space-y-5">
-          {grownUps && profile && (
-            <ParentPanel key={profile.id} profile={profile} lesson={lesson} buddy={buddy} account={account} onClose={() => {
-                setGrownUps(false)
-                grownUpsButton.current?.focus()
-              }}
-              onDelete={() => void deleteLearner(profile.id)}
-            />
-          )}
-          {body}
-        </div>
+        {grownUps && profile && (
+          <ParentPanel key={profile.id} profile={profile} lesson={lesson} buddy={buddy} account={account} onClose={() => {
+              setGrownUps(false)
+              grownUpsButton.current?.focus()
+            }}
+            onDelete={() => void deleteLearner(profile.id)}
+          />
+        )}
+        <div hidden={grownUps && profile !== null}>{body}</div>
       </TuningContext.Provider>
     </Shell>
   )
@@ -433,7 +431,7 @@ function Shell({ children, learner = null, testButton, grownUps, banner = false,
               )}
               {grownUps && (
                 <button ref={grownUps.ref} type="button" className={smallBtn} onClick={grownUps.onClick} aria-pressed={grownUps.open}>
-                  For grown-ups
+                  For parents
                 </button>
               )}
             </div>

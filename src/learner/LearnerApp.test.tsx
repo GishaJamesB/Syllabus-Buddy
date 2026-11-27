@@ -8,6 +8,7 @@ import { createBuddyService, type BuddyService } from '../ai/useBuddy'
 import lessonJson from '../content/ch6.lesson.json'
 import type { InferenceModeValue } from '../firebase/config'
 import type { AccountService, AccountStatus } from '../firebase/account'
+import { answeredAt } from './RecentAnswers'
 import type { Idea, Lesson } from '../content/lessonSchema'
 import { generate } from '../maths/registry'
 import { formatAnswer, type Question } from '../maths/types'
@@ -42,7 +43,12 @@ const restingBuddy = () => createBuddyService(() => Promise.reject(new Error('no
 
 async function start(open: () => Promise<Store>, lessonData: unknown = lessonJson, buddy: BuddyService = restingBuddy()) {
   render(<LearnerApp open={open} lessonData={lessonData} buddy={buddy} />)
-  await screen.findByText("Who's learning?")
+  await loaded()
+}
+
+async function loaded() {
+  await vi.waitFor(() => expect(screen.queryByText('Getting ready…')).toBeNull())
+  await act(async () => {})
 }
 
 async function addNickname(name: string) {
@@ -66,21 +72,40 @@ describe('LearnerApp', () => {
     expect(screen.getByText('Use a fun nickname, not your real name.')).toBeTruthy()
   })
 
-  it('refuses a duplicate nickname case-insensitively', async () => {
+  it('opens the saved child straight away on the next visit', async () => {
     const open = dbOpener()
     await start(open)
     await addNickname('Riya')
     await screen.findByText('Idea 1 of 7')
     cleanup()
     await start(open)
-    await screen.findByRole('button', { name: 'Riya' })
-    await addNickname('riya ')
-    expect(await screen.findByText('That nickname is taken on this device')).toBeTruthy()
+    await screen.findByText('Idea 1 of 7')
+    expect(screen.getByText('Hi, Riya!')).toBeTruthy()
+    expect(screen.queryByLabelText('Add a nickname')).toBeNull()
     expect((await (await open()).listProfiles()).length).toBe(1)
   })
 
+  it('greys out Check my answer when empty and after a check until the answer changes', async () => {
+    const open = dbOpener()
+    await start(open)
+    await addNickname('Riya')
+    await screen.findByText('Idea 1 of 7')
+    const check = () => screen.getByRole('button', { name: 'Check my answer' }) as HTMLButtonElement
+    expect(check().disabled).toBe(true)
+
+    fireEvent.change(screen.getByLabelText(/^Your answer/), { target: { value: '999999' } })
+    expect(check().disabled).toBe(false)
+    fireEvent.click(check())
+    fireEvent.click(check())
+    expect(check().disabled).toBe(true)
+    expect((await saved(open)).progress.attempts).toHaveLength(1)
+
+    fireEvent.click(screen.getByRole('button', { name: 'cm' }))
+    expect(check().disabled).toBe(false)
+  })
+
   it('keeps Next disabled on wrong answers, gives unit feedback, and Back works', async () => {
-    await start(dbOpener())
+    await start(dbOpener(), lessonJson, fakeBuddy({ tuning: { misses_before_help: 3 } }).service)
     await addNickname('Riya')
     await screen.findByText('Idea 1 of 7')
     const q = firstQuestion(lesson.ideas[0])
@@ -112,7 +137,7 @@ describe('LearnerApp', () => {
     expect((nextButton() as HTMLButtonElement).disabled).toBe(false)
   })
 
-  it('reveals steps after three misses and then needs a fresh question', async () => {
+  it('reveals steps after the help threshold of misses and then needs a fresh question', async () => {
     await start(dbOpener())
     await addNickname('Riya')
     await screen.findByText('Idea 1 of 7')
@@ -178,7 +203,6 @@ describe('LearnerApp', () => {
     cleanup()
 
     await start(open)
-    fireEvent.click(screen.getByRole('button', { name: 'Riya' }))
     await screen.findByText('Idea 4 of 7')
     expect(screen.getByText(prompt)).toBeTruthy()
 
@@ -194,7 +218,6 @@ describe('LearnerApp', () => {
     cleanup()
 
     await start(open)
-    fireEvent.click(screen.getByRole('button', { name: 'Riya' }))
     await screen.findByText('Idea 4 of 7')
     expect(screen.getByText(freshPrompt)).toBeTruthy()
   })
@@ -348,6 +371,7 @@ describe('Buddy', () => {
     type(String(q.answer.value), null)
     expect(status()).toContain("Don't forget the units")
     await screen.findByText('Buddy is thinking…')
+    fireEvent.change(screen.getByLabelText(/^Your answer/), { target: { value: '1' } })
     expect((screen.getByRole('button', { name: 'Check my answer' }) as HTMLButtonElement).disabled).toBe(false)
     expect(buddy.prompts[0]).not.toContain(`${q.answer.value} ${q.answer.unit}`)
 
@@ -649,7 +673,7 @@ const panelItems = () =>
 describe('Tutor', () => {
   afterEach(() => vi.restoreAllMocks())
 
-  it('opens after three misses, runs the scripted tools, and a correct practice answer passes the idea', async () => {
+  it('opens after the help threshold of misses, runs the scripted tools, and a correct practice answer passes the idea', async () => {
     vi.spyOn(Math, 'random').mockReturnValue(0.5)
     const practice = generate('perim_rectangle', 'medium', 500_000_000)
     const check = firstQuestion(lesson.ideas[0])
@@ -683,6 +707,7 @@ describe('Tutor', () => {
 
     type(String(practice.answer.value), practice.answer.unit)
     await screen.findByText("You've got it!")
+    expect(screen.getByText('✔ Yes! That is right. Well done!')).toBeTruthy()
     expect((nextButton() as HTMLButtonElement).disabled).toBe(false)
     expect(panelItems().slice(1, 4).map((t) => t?.split('(')[0])).toEqual([
       'Looked at past mistakesgetMistakeHistory',
@@ -718,7 +743,7 @@ describe('Tutor', () => {
       idea: { title: lesson.ideas[0].title, keyPoints: lesson.ideas[0].keyPoints },
       templateId: 'perim_rectangle',
       difficulty: 'medium',
-      misses: 3,
+      misses: MISSES_BEFORE_HELP,
       mistakeCodes: [],
       history: {},
       maxTurns: 5,
@@ -793,7 +818,27 @@ describe('Tutor gates and navigation', () => {
     expect(tutor.requests).toHaveLength(0)
   })
 
-  it('offers "Ask the Tutor" after a reload with three misses and only starts when asked', async () => {
+  it('offers "Ask the Tutor again" on a question that already had a tutor session', async () => {
+    const open = dbOpener()
+    const idea = lesson.ideas[0]
+    const q = firstQuestion(idea)
+    let profile = newProfile('Riya', 'riya', lesson, 0)
+    for (let i = 0; i < MISSES_BEFORE_HELP; i++) {
+      const input = { text: '999999', unit: q.answer.unit }
+      profile = { ...profile, progress: recordAttempt(profile.progress, idea, input, grade(q, input), i) }
+    }
+    profile.progress.tutorSessions = [{ ideaId: idea.id, seed: q.seed, startedAt: 0, calls: [], results: [], outcome: 'failed' }]
+    await (await open()).addProfile(profile)
+
+    const tutor = tutorBuddy(['hang'])
+    await start(open, lessonJson, tutor.service)
+    await screen.findByText('Idea 1 of 7')
+    fireEvent.click(screen.getByRole('button', { name: 'Ask the Tutor again' }))
+    expect(screen.getByText('☁️ Tutor')).toBeTruthy()
+    await vi.waitFor(() => expect(tutor.requests).toHaveLength(1))
+  })
+
+  it('offers "Ask the Tutor" after a reload with enough misses and only starts when asked', async () => {
     const open = dbOpener()
     const idea = lesson.ideas[0]
     const q = firstQuestion(idea)
@@ -807,7 +852,6 @@ describe('Tutor gates and navigation', () => {
     const tutor = tutorBuddy(['hang'])
     await start(open, lessonJson, tutor.service)
     await act(async () => {})
-    fireEvent.click(screen.getByRole('button', { name: 'Riya' }))
     await screen.findByText('Idea 1 of 7')
     expect(screen.getByRole('button', { name: 'Show me how' })).toBeTruthy()
     await act(async () => {})
@@ -856,8 +900,7 @@ describe('Weak-spot test', () => {
 
   async function startTestApp(open: () => Promise<Store>, buddy: BuddyService = restingBuddy()) {
     render(<LearnerApp open={open} lessonData={lessonJson} buddy={buddy} now={now} random={random()} />)
-    await screen.findByText("Who's learning?")
-    await act(async () => {})
+    await loaded()
   }
 
   async function openTest(open: () => Promise<Store>) {
@@ -947,7 +990,6 @@ describe('Weak-spot test', () => {
 
     clock += 65_000
     await startTestApp(open)
-    fireEvent.click(screen.getByRole('button', { name: 'Riya' }))
     await screen.findByText('Question 4 of 10')
     expect(screen.getByRole('timer').textContent).toBe('18:55 left')
     expect(screen.getByRole('button', { name: 'Back to lesson' })).toBeTruthy()
@@ -989,7 +1031,6 @@ describe('Weak-spot test', () => {
 
     clock = test.startedAt + test.timeLimitS * 1000 + 1
     await startTestApp(open)
-    fireEvent.click(screen.getByRole('button', { name: 'Riya' }))
     await screen.findByText('Test results')
     expect(screen.getByText('1 out of 10')).toBeTruthy()
     expect((await saved(open)).progress.tests[0].finishedAt).toBe(clock)
@@ -1018,7 +1059,6 @@ describe('Weak-spot test', () => {
     profile = { ...profile, progress: { ...profile.progress, currentIdeaId: null, passedIdeaIds: lesson.ideas.map((i) => i.id) } }
     await (await open()).addProfile(profile)
     await startTestApp(open)
-    fireEvent.click(screen.getByRole('button', { name: 'Riya' }))
     await screen.findByText('Chapter complete')
     fireEvent.click(screen.getByRole('button', { name: 'Take the test' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Begin' }))
@@ -1087,7 +1127,6 @@ describe('Weak-spot test', () => {
     profile = { ...profile, progress: { ...profile.progress, currentIdeaId: null, passedIdeaIds: lesson.ideas.map((i) => i.id) } }
     await (await open()).addProfile(profile)
     await startTestApp(open)
-    fireEvent.click(screen.getByRole('button', { name: 'Riya' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Take the test' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Begin' }))
     await screen.findByText('Question 1 of 10')
@@ -1132,21 +1171,20 @@ describe('Tuning', () => {
 
   it('applies a threshold that arrives mid-question from the next question', async () => {
     let ready!: () => void
-    const buddy = fakeBuddy({ tuning: { misses_before_help: 2 }, load: new Promise<void>((r) => (ready = r)) })
+    const buddy = fakeBuddy({ tuning: { misses_before_help: 4 }, load: new Promise<void>((r) => (ready = r)) })
     await start(dbOpener(), lessonJson, buddy.service)
     await addNickname('Riya')
     await screen.findByText('Idea 1 of 7')
     await act(async () => ready())
-    expect(buddy.service.tuning().misses_before_help).toBe(2)
+    expect(buddy.service.tuning().misses_before_help).toBe(4)
     type('999999', 'cm')
-    type('999999', 'cm')
-    await act(async () => {})
-    expect(screen.queryByRole('button', { name: 'Show me how' })).toBeNull()
     type('999999', 'cm')
     await act(async () => {})
     fireEvent.click(screen.getByRole('button', { name: 'Show me how' }))
     fireEvent.click(screen.getByRole('button', { name: 'Try a new question' }))
-    type('999999', 'cm')
+    for (let i = 0; i < 3; i++) type('999999', 'cm')
+    await act(async () => {})
+    expect(screen.queryByRole('button', { name: 'Show me how' })).toBeNull()
     type('999999', 'cm')
     await act(async () => {})
     expect(screen.getByRole('button', { name: 'Show me how' })).toBeTruthy()
@@ -1218,7 +1256,7 @@ describe('Tuning', () => {
   })
 })
 
-describe('For grown-ups', () => {
+describe('For parents', () => {
   async function withMistakes(open: () => Promise<Store>) {
     const p = newProfile('Zanzibar', 'zanzibar', lesson, 0)
     const attempt = { ideaId: 'idea-1', templateId: 'perim_rectangle', difficulty: 'medium' as const, seed: 1, answerText: '1', unit: 'cm' as const, correct: false, reason: 'wrong_number' as const, at: 1 }
@@ -1230,21 +1268,109 @@ describe('For grown-ups', () => {
     await (await open()).addProfile(p)
   }
 
-  async function openPanel(nickname = 'Zanzibar') {
-    fireEvent.click(await screen.findByRole('button', { name: nickname }))
+  async function openPanel() {
     await screen.findByText('Idea 1 of 7')
-    fireEvent.click(screen.getByRole('button', { name: 'For grown-ups' }))
-    return within(screen.getByRole('region', { name: 'For grown-ups' }))
+    fireEvent.click(screen.getByRole('button', { name: 'For parents' }))
+    return within(screen.getByRole('region', { name: 'For parents' }))
   }
 
   it('says there are no mistakes for a new learner', async () => {
     await start(dbOpener())
     await addNickname('Riya')
     await screen.findByText('Idea 1 of 7')
-    fireEvent.click(screen.getByRole('button', { name: 'For grown-ups' }))
-    const panel = within(screen.getByRole('region', { name: 'For grown-ups' }))
+    fireEvent.click(screen.getByRole('button', { name: 'For parents' }))
+    const panel = within(screen.getByRole('region', { name: 'For parents' }))
     expect(panel.getByText('No mistakes recorded yet.')).toBeTruthy()
     expect(panel.getByText('Ideas passed: 0 of 7')).toBeTruthy()
+  })
+
+  it('shows recent answers newest first, with the question, the answer and what went wrong', async () => {
+    const open = dbOpener()
+    await withMistakes(open)
+    await startWith(fakeBuddy(), open)
+    const panel = await openPanel()
+    const items = within(panel.getByRole('list', { name: 'Recent answers' })).getAllByRole('listitem')
+    const prompt = generate('perim_rectangle', 'medium', 1).prompt
+    expect(items).toHaveLength(3)
+    expect(items[0].textContent).toBe(`${answeredAt(1)}${prompt}Answer: 1 cm✘ Forgets to write the units`)
+    expect(items[1].textContent).toContain('✘ Adds only two sides when finding perimeter')
+  })
+
+  it('counts wrong answers that have no named mistake instead of saying there are none', async () => {
+    await start(dbOpener())
+    await addNickname('Riya')
+    await screen.findByText('Idea 1 of 7')
+    type('999999', 'cm')
+    type('999999', 'cm')
+    fireEvent.click(screen.getByRole('button', { name: 'For parents' }))
+    const panel = within(screen.getByRole('region', { name: 'For parents' }))
+    expect(panel.getByText('2 wrong answers so far, but no common kind of mistake yet. See Recent answers below.')).toBeTruthy()
+  })
+
+  it('shows the parents page instead of the lesson, and the lesson comes back on Close', async () => {
+    await start(dbOpener())
+    await addNickname('Riya')
+    await screen.findByText('Idea 1 of 7')
+    fireEvent.click(screen.getByRole('button', { name: 'For parents' }))
+    expect(screen.queryByRole('button', { name: 'Check my answer' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    expect(screen.getByRole('button', { name: 'Check my answer' })).toBeTruthy()
+  })
+
+  it('shows 10 answers and 20 more at a time', async () => {
+    const open = dbOpener()
+    const p = newProfile('Riya', 'riya', lesson, 0)
+    const attempt = { ideaId: 'idea-1', templateId: 'perim_rectangle', difficulty: 'medium' as const, seed: 1, answerText: '1', unit: 'cm' as const, correct: false, reason: 'wrong_number' as const, code: null, at: 1 }
+    p.progress.attempts = Array.from({ length: 35 }, (_, i) => ({ ...attempt, at: i }))
+    await (await open()).addProfile(p)
+    await start(open)
+    const panel = await openPanel()
+    const count = () => within(panel.getByRole('list', { name: 'Recent answers' })).getAllByRole('listitem').length
+    expect(count()).toBe(10)
+    fireEvent.click(panel.getByRole('button', { name: 'Show 20 more' }))
+    expect(count()).toBe(30)
+    fireEvent.click(panel.getByRole('button', { name: 'Show 5 more' }))
+    expect(count()).toBe(35)
+    expect(panel.queryByRole('button', { name: /^Show \d+ more$/ })).toBeNull()
+  })
+
+  it('lists finished tests with their score, questions, answers and results', async () => {
+    const open = dbOpener()
+    const p = newProfile('Riya', 'riya', lesson, 0)
+    const refs = [
+      { templateId: 'perim_rectangle', difficulty: 'medium' as const, seed: 1, ideaId: 'idea-1' },
+      { templateId: 'perim_rectangle', difficulty: 'medium' as const, seed: 2, ideaId: 'idea-1' },
+    ]
+    const right = testQuestion(refs[0]).answer
+    p.progress.tests = [
+      {
+        id: 't1',
+        startedAt: 0,
+        finishedAt: 5000,
+        timeLimitS: 240,
+        questions: refs,
+        answers: [{ text: String(right.value), unit: right.unit }, null],
+        results: [{ correct: true, reason: null, code: null }, { correct: false, reason: 'blank', code: null }],
+      },
+    ]
+    await (await open()).addProfile(p)
+    await start(open)
+    const panel = await openPanel()
+    expect(panel.getByText(`${answeredAt(5000)}: 1 out of 2`)).toBeTruthy()
+    const items = within(panel.getByRole('list', { name: `Test on ${answeredAt(5000)}` })).getAllByRole('listitem')
+    expect(items[0].textContent).toContain(testQuestion(refs[0]).prompt)
+    expect(items[0].textContent).toContain('✔ Right')
+    expect(items[1].textContent).toContain('Answer: (blank)✘ Left blank')
+  })
+
+  it('says there are no tests or answers yet for a new learner', async () => {
+    await start(dbOpener())
+    await addNickname('Riya')
+    await screen.findByText('Idea 1 of 7')
+    fireEvent.click(screen.getByRole('button', { name: 'For parents' }))
+    const panel = within(screen.getByRole('region', { name: 'For parents' }))
+    expect(panel.getByText('No answers yet.')).toBeTruthy()
+    expect(panel.getByText('No tests finished yet.')).toBeTruthy()
   })
 
   it('lists the mistakes and a 🔒 paragraph written on-device from codes and counts only', async () => {
@@ -1289,11 +1415,11 @@ describe('For grown-ups', () => {
     await start(dbOpener())
     await addNickname('Riya')
     await screen.findByText('Idea 1 of 7')
-    const button = screen.getByRole('button', { name: 'For grown-ups' })
+    const button = screen.getByRole('button', { name: 'For parents' })
     fireEvent.click(button)
-    expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'For grown-ups' }))
+    expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'For parents' }))
     fireEvent.click(screen.getByRole('button', { name: 'Close' }))
-    expect(screen.queryByRole('region', { name: 'For grown-ups' })).toBeNull()
+    expect(screen.queryByRole('region', { name: 'For parents' })).toBeNull()
     expect(document.activeElement).toBe(button)
   })
 
@@ -1310,16 +1436,18 @@ describe('For grown-ups', () => {
     expect(buddy.createSummaryModel).toHaveBeenCalledTimes(1)
   })
 
-  it('writes a new paragraph when the mistakes change while open', async () => {
+  it('writes a new paragraph after new mistakes', async () => {
     let n = 0
     const buddy = fakeBuddy({ summary: async () => `Summary ${++n}.` })
     const open = dbOpener()
     await withMistakes(open)
     await startWith(buddy, open)
-    const panel = await openPanel()
-    expect(await panel.findByText('Summary 1.')).toBeTruthy()
+    expect(await (await openPanel()).findByText('Summary 1.')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
     const q = firstQuestion(lesson.ideas[0])
     type(String(q.mistakes[0].value), q.answer.unit)
+    fireEvent.click(screen.getByRole('button', { name: 'For parents' }))
+    const panel = within(screen.getByRole('region', { name: 'For parents' }))
     expect(await panel.findByText('Summary 2.')).toBeTruthy()
     expect(buddy.summaryPrompts).toHaveLength(2)
     expect(buddy.summaryPrompts[1]).not.toBe(buddy.summaryPrompts[0])
@@ -1345,8 +1473,8 @@ describe('Keep progress and delete data', () => {
     await screen.findByText("Who's learning?")
     await addNickname('Riya')
     await screen.findByText('Idea 1 of 7')
-    fireEvent.click(screen.getByRole('button', { name: 'For grown-ups' }))
-    return within(screen.getByRole('region', { name: 'For grown-ups' }))
+    fireEvent.click(screen.getByRole('button', { name: 'For parents' }))
+    return within(screen.getByRole('region', { name: 'For parents' }))
   }
 
   it('offers Google sign-in when the browser is anonymous', async () => {

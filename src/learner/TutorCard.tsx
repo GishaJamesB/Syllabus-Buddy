@@ -43,7 +43,8 @@ export function TutorCard(props: Props) {
   const latest = useRef(props)
   latest.current = props
   const [state, setState] = useState<CardState>({ kind: 'off' })
-  const [feedback, setFeedback] = useState<{ questionId: string; message: string } | null>(null)
+  const [feedback, setFeedback] = useState<Record<string, { correct: boolean; message: string }>>({})
+  const [retry, setRetry] = useState<string | null>(null)
 
   useEffect(() => {
     const { hooks, brain, idea, checkQuestion, misses, hasPrevious } = latest.current
@@ -142,7 +143,10 @@ export function TutorCard(props: Props) {
 
   function submit(question: Question, input: { text: string; unit: Unit | null }) {
     const result = session.answer(input)
-    if (result) setFeedback({ questionId: question.id, message: feedbackFor(result, question).message })
+    if (!result) return
+    if (result.reason === 'not_a_number') return setRetry(feedbackFor(result, question).message)
+    setRetry(null)
+    setFeedback((all) => ({ ...all, [question.id]: { correct: result.correct, message: feedbackFor(result, question).message } }))
   }
 
   return (
@@ -158,12 +162,20 @@ export function TutorCard(props: Props) {
                 <ReadAloud label="Read the tutor's message aloud" parts={[item.text]} />
               </div>
             )
-          case 'practice':
+          case 'practice': {
+            const answered = feedback[item.question.id]
             return (
-              <p key={i} className="text-lg font-bold">
-                {item.question.prompt}
-              </p>
+              <div key={i} className="space-y-2">
+                <p className="text-lg font-bold">{item.question.prompt}</p>
+                {answered && (
+                  <p className={`rounded-xl px-4 py-2 font-bold ${answered.correct ? 'bg-teal-soft text-teal' : 'bg-danger-soft text-danger'}`}>
+                    {answered.correct ? '✔ ' : '✘ '}
+                    {answered.message}
+                  </p>
+                )}
+              </div>
             )
+          }
           case 'diagram':
             return (
               <div key={i} className="mx-auto max-w-sm text-ink">
@@ -183,7 +195,7 @@ export function TutorCard(props: Props) {
       {awaiting && <AnswerBox key={awaiting.id} question={awaiting} answered={null} onSubmit={(input) => submit(awaiting, input)} />}
 
       <div aria-live="polite" role="status" className="text-lg font-extrabold">
-        {feedback && view.phase !== 'done' && (!awaiting || awaiting.id === feedback.questionId) && <p>{feedback.message}</p>}
+        {retry && awaiting && <p>{retry}</p>}
         {view.phase === 'thinking' && <p>Tutor is thinking…</p>}
         {view.phase === 'busy' && <p>Tutor is busy, trying again…</p>}
         {view.outcome === 'mastered' && <p className="rounded-xl bg-teal-soft px-4 py-3 text-teal">You've got it!</p>}

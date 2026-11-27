@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import type { BuddyService } from '../ai/useBuddy'
 import type { AccountService } from '../firebase/account'
 import { AccountSection } from './AccountSection'
@@ -18,6 +18,11 @@ export function NicknameScreen({ profiles, onPick, onAdd, buddy, account }: Prop
   const [name, setName] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const saved = profiles[0]
+
+  useEffect(() => {
+    if (saved) onPick(saved)
+  }, [saved, onPick])
 
   async function add(e: FormEvent) {
     e.preventDefault()
@@ -36,25 +41,11 @@ export function NicknameScreen({ profiles, onPick, onAdd, buddy, account }: Prop
     }
   }
 
+  if (saved) return null
+
   return (
     <div className="space-y-5">
       <h2 className="text-3xl font-extrabold text-purple">Who's learning?</h2>
-
-      {profiles.length > 0 && (
-        <ul className="grid gap-3 sm:grid-cols-2">
-          {profiles.map((p) => (
-            <li key={p.id}>
-              <button
-                type="button"
-                onClick={() => onPick(p)}
-                className="w-full rounded-card bg-teal px-6 py-4 text-left text-2xl font-extrabold text-white shadow-card hover:bg-teal/90 focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-purple"
-              >
-                {p.nickname}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
 
       <form onSubmit={add} className={`${card} space-y-3`} noValidate>
         <label htmlFor="nickname" className="block text-xl font-extrabold">
@@ -67,7 +58,7 @@ export function NicknameScreen({ profiles, onPick, onAdd, buddy, account }: Prop
           id="nickname"
           type="text"
           autoComplete="off"
-          autoFocus={profiles.length === 0}
+          autoFocus
           value={name}
           aria-describedby={error ? 'nickname-hint nickname-error' : 'nickname-hint'}
           aria-invalid={error ? true : undefined}
@@ -91,7 +82,7 @@ export function NicknameScreen({ profiles, onPick, onAdd, buddy, account }: Prop
 
       <BrainStatus buddy={buddy} />
 
-      <AccountSection account={account} heading="For grown-ups" className={card} />
+      <AccountSection account={account} heading="For parents" className={card} />
     </div>
   )
 }

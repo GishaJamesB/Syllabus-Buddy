@@ -36,8 +36,8 @@ export function AccountSection({ account, heading, className }: { account: Accou
       {state.kind === 'ready' && !state.status.signedIn && (
         <div className="mt-2 space-y-2">
           <p className="text-lg">
-            Progress is saved in this browser only. A grown-up can sign in with Google to keep it, or to bring back
-            progress saved on another computer.
+            Progress is saved in this browser only. Parents can sign in with Google to keep their child's progress on any
+            computer, or to bring it back on a new one.
           </p>
           <button type="button" className={softBtn} onClick={() => void run(() => account.signIn())}>
             Sign in with Google

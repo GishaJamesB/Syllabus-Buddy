@@ -47,7 +47,7 @@ describe('tuningState', () => {
       DEFAULT_TUNING,
     )
     expect(state.values.max_turns).toBe(7)
-    expect(state.values.misses_before_help).toBe(3)
+    expect(state.values.misses_before_help).toBe(2)
     expect(state.sources).toMatchObject({ max_turns: 'remote', misses_before_help: 'default', test_seconds_easy: 'default' })
     expect(state.raw).toEqual({ misses_before_help: '99' })
   })

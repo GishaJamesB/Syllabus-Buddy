@@ -5,7 +5,7 @@ import type { GradeResult, MistakeCode, Question, Unit } from '../maths/types'
 import type { TestRecord } from './test'
 
 export const SCHEMA_VERSION = 1
-export const MISSES_BEFORE_HELP = 3
+export const MISSES_BEFORE_HELP = 2
 export const NICKNAME_MAX = 20
 
 export interface Attempt {

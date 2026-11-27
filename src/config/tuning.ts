@@ -35,7 +35,7 @@ export const TUNING_RANGES: Record<NumberKey, { min: number; max: number }> = {
 export function defaultTuning(inferenceMode: InferenceModeValue = 'prefer_on_device'): TuningValues {
   return {
     max_turns: 5,
-    misses_before_help: 3,
+    misses_before_help: 2,
     test_seconds_easy: 90,
     test_seconds_medium: 120,
     test_seconds_hard: 150,

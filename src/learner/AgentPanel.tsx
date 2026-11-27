@@ -75,7 +75,7 @@ function Entry({ entry }: { entry: LogEntry }) {
 export function AgentPanel({ log }: { log: LogEntry[] }) {
   return (
     <details className="rounded-xl bg-purple-soft px-4 py-3">
-      <summary className="cursor-pointer text-lg font-extrabold text-purple">What the AI did (for grown-ups)</summary>
+      <summary className="cursor-pointer text-lg font-extrabold text-purple">What the AI did (for parents)</summary>
       <ol aria-label="What the AI did" className="mt-3 list-decimal space-y-3 pl-6">
         {log.map((entry, i) => (
           <li key={i}>

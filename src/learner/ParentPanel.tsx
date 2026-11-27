@@ -3,6 +3,8 @@ import { brainRow, useBrainStatus, type BuddyService } from '../ai/useBuddy'
 import type { Lesson } from '../content/lessonSchema'
 import type { AccountService } from '../firebase/account'
 import { AccountSection } from './AccountSection'
+import { ParentTests } from './ParentTests'
+import { RecentAnswers } from './RecentAnswers'
 import { parentSummary, writeSummary } from './parentSummary'
 import type { Profile } from './progress'
 import { card, softBtn } from './styles'
@@ -30,7 +32,13 @@ function DeleteSection({ nickname, onDelete }: { nickname: string; onDelete: () 
   )
 }
 
-export const NO_NANO_NOTE = 'A written summary needs on-device AI in Chrome.'
+function noPatternText(wrong: number): string {
+  if (wrong === 0) return 'No mistakes recorded yet.'
+  const answers = wrong === 1 ? '1 wrong answer' : `${wrong} wrong answers`
+  return `${answers} so far, but no common kind of mistake yet. See Recent answers below.`
+}
+
+export const NO_NANO_NOTE ='A written summary needs on-device AI in Chrome.'
 export const SUMMARY_FAILED = "Couldn't write a summary this time."
 
 type Paragraph = { kind: 'writing' } | { kind: 'done'; text: string } | { kind: 'failed' } | { kind: 'none' }
@@ -70,7 +78,7 @@ export function ParentPanel({ profile, lesson, buddy, account, onClose, onDelete
     <section className={`${card} space-y-4`} aria-labelledby="grownups-heading">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 id="grownups-heading" ref={heading} tabIndex={-1} className="text-2xl font-extrabold text-purple focus:outline-none">
-          For grown-ups
+          For parents
         </h2>
         <button type="button" className={softBtn} onClick={onClose}>
           Close
@@ -84,7 +92,7 @@ export function ParentPanel({ profile, lesson, buddy, account, onClose, onDelete
       <div>
         <h3 className="text-xl font-extrabold">Most common mistakes</h3>
         {summary.mistakes.length === 0 ? (
-          <p className="text-lg">No mistakes recorded yet.</p>
+          <p className="text-lg">{noPatternText(profile.progress.attempts.filter((a) => !a.correct).length)}</p>
         ) : (
           <ul className="mt-2 space-y-1 text-lg">
             {summary.mistakes.map((m) => (
@@ -96,18 +104,9 @@ export function ParentPanel({ profile, lesson, buddy, account, onClose, onDelete
         )}
       </div>
 
-      {summary.scores.length > 0 && (
-        <div>
-          <h3 className="text-xl font-extrabold">Last test scores</h3>
-          <ul className="mt-2 space-y-1 text-lg">
-            {summary.scores.map((s, i) => (
-              <li key={i}>
-                {s.correct} out of {s.outOf}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+      <RecentAnswers attempts={profile.progress.attempts} />
+
+      <ParentTests progress={profile.progress} />
 
       <div role="status" aria-live="polite" className="text-lg">
         {paragraph.kind === 'writing' && <p>Writing a summary on this device…</p>}
