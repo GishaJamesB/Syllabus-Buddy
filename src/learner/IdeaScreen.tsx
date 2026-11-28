@@ -37,8 +37,6 @@ interface Props {
   onNext: () => void
   buddyView: BuddyView | null
   brain: BrainStatus
-  previousTitle: string | null
-  onAsk: (text: string, question: Question) => void
   tutor?: TutorHooks
   onTutorRunning?: (running: boolean) => void
 }
@@ -61,8 +59,6 @@ export function IdeaScreen({
   onNext,
   buddyView,
   brain,
-  previousTitle,
-  onAsk,
   tutor,
   onTutorRunning,
 }: Props) {
@@ -239,14 +235,7 @@ export function IdeaScreen({
           )}
         </div>
 
-        <BuddyPanel
-          view={tutorActive && shownBuddy?.kind === 'miss' ? null : shownBuddy}
-          brain={brain}
-          ideaTitle={idea.title}
-          previousTitle={previousTitle}
-          onGoBack={onBack}
-          onAsk={(text) => onAsk(text, question)}
-        />
+        <BuddyPanel view={tutorActive ? null : shownBuddy} brain={brain} />
 
         {tutorOn && tutorHooks && (
           <TutorCard

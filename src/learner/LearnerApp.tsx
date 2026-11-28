@@ -360,8 +360,6 @@ export default function LearnerApp({
           onTutorRunning={setTutorRunning}
           buddyView={turns.view}
           brain={brain}
-          previousTitle={index > 0 ? lesson.ideas[index - 1].title : null}
-          onAsk={(text, question) => void turns.send(contextFor(), { kind: 'ask', turn: { idea, question, text } })}
           tutor={{
             service: buddy,
             history: mistakeHistory(profile),

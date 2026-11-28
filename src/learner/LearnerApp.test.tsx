@@ -13,7 +13,7 @@ import type { Idea, Lesson } from '../content/lessonSchema'
 import { generate } from '../maths/registry'
 import { formatAnswer, type Question } from '../maths/types'
 import LearnerApp from './LearnerApp'
-import { checkQuestion, firstCheckSeed, freshSeed, mistakeHistory, MISSES_BEFORE_HELP, newProfile, recordAttempt } from './progress'
+import { checkQuestion, firstCheckSeed, freshSeed, MISSES_BEFORE_HELP, newProfile, recordAttempt } from './progress'
 import { grade } from '../maths/grade'
 import { memoryStore, openStore, type Store } from './store'
 import { testQuestion, type TestRecord } from './test'
@@ -349,11 +349,6 @@ async function learnIdea2() {
   await screen.findByText('Idea 2 of 7')
 }
 
-function askBuddy(text: string) {
-  fireEvent.change(screen.getByLabelText('Ask Buddy'), { target: { value: text } })
-  fireEvent.click(screen.getByRole('button', { name: 'Ask' }))
-}
-
 async function saved(open: () => Promise<Store>) {
   await act(async () => {})
   return (await (await open()).listProfiles())[0]
@@ -440,53 +435,6 @@ describe('Buddy', () => {
     expect(status()).toContain('Not quite')
   })
 
-  it('handles the four Ask intents and never stores the typed text', async () => {
-    const buddy = fakeBuddy()
-    const open = await startWith(buddy)
-    await learnIdea2()
-
-    askBuddy("I don't get it")
-    await buddy.reply({ text: json('needs_clue', null, 'Look at one side first.'), source: 'on_device' })
-    expect(screen.getByText('Look at one side first.')).toBeTruthy()
-    expect(screen.getByText('🔒 On this device')).toBeTruthy()
-
-    askBuddy('I added 12 and 8')
-    await buddy.reply({ text: json('answer_attempt', 'perim_two_sides_only', 'A square has four sides.'), source: 'on_device' })
-    expect(screen.getByText('A square has four sides.')).toBeTruthy()
-
-    askBuddy("what's for lunch")
-    await buddy.reply({ text: json('off_topic', null, null), source: 'on_device' })
-    expect(screen.getByText(`Let's get back to ${lesson.ideas[1].title}!`)).toBeTruthy()
-
-    askBuddy('can I see the last one')
-    await buddy.reply({ text: json('review_previous', null, 'Rectangles came first.'), source: 'on_device' })
-    expect(screen.getByText('Rectangles came first.')).toBeTruthy()
-
-    const profile = await saved(open)
-    expect(JSON.stringify(profile)).not.toMatch(/lunch|added 12|get it|last one/)
-    expect(profile.progress.buddyTurns.map((t) => [t.kind, t.intent, t.misconception])).toEqual([
-      ['ask', 'needs_clue', null],
-      ['ask', 'answer_attempt', 'perim_two_sides_only'],
-      ['ask', 'off_topic', null],
-      ['ask', 'review_previous', null],
-    ])
-    expect(mistakeHistory(profile)).toEqual({ perim_two_sides_only: 1 })
-
-    fireEvent.click(screen.getByRole('button', { name: `Go back to: ${lesson.ideas[0].title}` }))
-    await screen.findByText('Idea 1 of 7')
-  })
-
-  it('hides the go-back button on the first idea', async () => {
-    const buddy = fakeBuddy()
-    await startWith(buddy)
-    await addNickname('Riya')
-    await screen.findByText('Idea 1 of 7')
-    askBuddy('can I see the last one')
-    await buddy.reply({ text: json('review_previous', null, 'Read the key points.'), source: 'on_device' })
-    expect(screen.getByText('Read the key points.')).toBeTruthy()
-    expect(screen.queryByRole('button', { name: /^Go back to/ })).toBeNull()
-  })
-
   it('drops a reply when a newer request exists or the idea changed', async () => {
     const buddy = fakeBuddy()
     const open = await startWith(buddy)
@@ -528,13 +476,12 @@ describe('Buddy', () => {
     expect(screen.getByText('Add all the sides.')).toBeTruthy()
   })
 
-  it('rests with the Ask box disabled when Firebase fails', async () => {
+  it('rests when Firebase fails', async () => {
     await start(dbOpener())
     await act(async () => {})
     expect(screen.getByText('Buddy is resting')).toBeTruthy()
     await addNickname('Riya')
     await screen.findByText('Idea 1 of 7')
-    expect((screen.getByLabelText('Ask Buddy') as HTMLInputElement).disabled).toBe(true)
     type('1', 'cm')
     expect(await screen.findByText('Buddy is resting right now')).toBeTruthy()
     expect(status()).toContain('Not quite')
@@ -596,12 +543,11 @@ describe('Buddy', () => {
     expect(screen.queryByText('Buddy uses the cloud on this computer')).toBeNull()
   })
 
-  it('disables Ask and makes no call when on-device Buddy is needed', async () => {
+  it('makes no call when on-device Buddy is needed', async () => {
     const buddy = fakeBuddy({ mode: 'only_on_device', nano: 'unavailable' })
     await startWith(buddy)
     await addNickname('Riya')
     await screen.findByText('Idea 1 of 7')
-    expect((screen.getByLabelText('Ask Buddy') as HTMLInputElement).disabled).toBe(true)
     type('1', 'cm')
     await act(async () => {})
     expect(buddy.prompts).toHaveLength(0)
@@ -693,8 +639,6 @@ describe('Tutor', () => {
     await act(async () => {})
     await addNickname('Zanzibar')
     await screen.findByText('Idea 1 of 7')
-    askBuddy('my secret sentence')
-    await act(async () => {})
     for (let i = 0; i < MISSES_BEFORE_HELP; i++) type('999999', 'cm')
 
     expect(screen.getByText('☁️ Tutor')).toBeTruthy()
@@ -736,7 +680,7 @@ describe('Tutor', () => {
 
     const sent = JSON.stringify([tutor.system, tutor.requests])
     expect(tutor.requests).toHaveLength(2)
-    for (const secret of ['Zanzibar', 'secret sentence', '999999', formatAnswer(check.answer), formatAnswer(practice.answer)]) {
+    for (const secret of ['Zanzibar', '999999', formatAnswer(check.answer), formatAnswer(practice.answer)]) {
       expect(sent).not.toContain(secret)
     }
     expect(JSON.parse(tutor.requests[0] as string)).toEqual({

@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState, useSyncExternalStore } from 'react'
 import type { InferenceModeValue } from '../firebase/config'
-import { askTurn, missTurn, type AskTurn, type BuddyReply, type MissTurn, type TurnModel } from './buddy'
+import { missTurn, type BuddyReply, type MissTurn, type TurnModel } from './buddy'
 import { getOnDeviceStatus, type OnDeviceStatus } from './onDeviceStatus'
 import type { FunctionDeclaration } from 'firebase/ai'
 import type { TutorModel } from './tutorAgent'
@@ -206,9 +206,7 @@ export interface TurnContext {
   seed: number
 }
 
-export type BuddyRequest =
-  | { kind: 'miss'; turn: MissTurn }
-  | { kind: 'ask'; turn: AskTurn }
+export type BuddyRequest = { kind: 'miss'; turn: MissTurn }
 
 export interface BuddyView {
   context: TurnContext
@@ -234,7 +232,7 @@ export function useBuddyTurns(options: Options) {
     let reply: BuddyReply
     try {
       const model = await opts.current.service.model()
-      reply = request.kind === 'miss' ? await missTurn(model, request.turn) : await askTurn(model, request.turn)
+      reply = await missTurn(model, request.turn)
     } catch {
       reply = { outcome: 'failed' }
     }
